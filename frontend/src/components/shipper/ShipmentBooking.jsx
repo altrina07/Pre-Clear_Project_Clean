@@ -11,13 +11,14 @@ export function ShipmentBooking({ onNavigate }) {
     // 1. Passed AI Evaluation
     // 2. Approved by Broker
     // 3. Have a token (token-generated status or token exists)
-    // 4. Not yet booked (status = 'token-generated')
+    // 4. Not yet paid (exclude paid shipments)
     const allShipments = shipmentsStore.getAllShipments();
     const bookableShipments = allShipments.filter(s => {
       const aiApproved = s.aiApproval === 'approved' || s.AiApprovalStatus === 'approved';
       const brokerApproved = s.brokerApproval === 'approved' || s.BrokerApprovalStatus === 'approved';
       const hasToken = s.token || s.preclearToken || s.PreclearToken;
-      const canBook = s.status === 'token-generated' || s.Status === 'token-generated' || (aiApproved && brokerApproved && hasToken);
+      const isPaid = s.status === 'paid' || s.Status === 'paid' || s.paymentStatus === 'completed';
+      const canBook = (s.status === 'token-generated' || s.Status === 'token-generated' || (aiApproved && brokerApproved && hasToken)) && !isPaid;
       return canBook;
     });
     setShipments(bookableShipments);
@@ -29,7 +30,8 @@ export function ShipmentBooking({ onNavigate }) {
         const aiApproved = s.aiApproval === 'approved' || s.AiApprovalStatus === 'approved';
         const brokerApproved = s.brokerApproval === 'approved' || s.BrokerApprovalStatus === 'approved';
         const hasToken = s.token || s.preclearToken || s.PreclearToken;
-        const canBook = s.status === 'token-generated' || s.Status === 'token-generated' || (aiApproved && brokerApproved && hasToken);
+        const isPaid = s.status === 'paid' || s.Status === 'paid' || s.paymentStatus === 'completed';
+        const canBook = (s.status === 'token-generated' || s.Status === 'token-generated' || (aiApproved && brokerApproved && hasToken)) && !isPaid;
         return canBook;
       });
       setShipments(bookableUpdated);
@@ -87,7 +89,7 @@ export function ShipmentBooking({ onNavigate }) {
                       <Package className="w-6 h-6 text-white" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-slate-900 mb-1">{shipment.productName}</h3>
+                      <h3 className="text-slate-900 font-semibold mb-1">{shipment.title || shipment.productName || 'Shipment'}</h3>
                       <p className="text-slate-600 text-sm mb-2">ID: {shipment.id}</p>
                       <div className="flex items-center gap-2 mb-3">
                         <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs flex items-center gap-1">
@@ -98,16 +100,26 @@ export function ShipmentBooking({ onNavigate }) {
                           <CheckCircle className="w-3 h-3" />
                           Broker Approved
                         </span>
-                      </div>                        <div className="text-slate-600 text-sm">
+                      </div>                  <div className="text-slate-600 text-sm">
                           <p className="mb-1">
                             <strong>Route:</strong> {shipment.shipper?.city || 'N/A'}, {shipment.shipper?.country || 'N/A'} → {shipment.consignee?.city || 'N/A'}, {shipment.consignee?.country || 'N/A'}
                           </p>
                           <p className="mb-1">
                             <strong>Weight:</strong> {shipment.weight || 'N/A'} kg
                           </p>
-                                  <p className="mb-1">
-                                    <strong>Value:</strong> {formatCurrency(shipment.value || 0, shipment.currency || (getCurrencyByCountry(shipment.shipper?.country || 'US') || {}).code)}
-                                  </p>
+                          <p className="mb-1">
+                            <strong>Value:</strong> {formatCurrency(shipment.value || 0, shipment.currency || (getCurrencyByCountry(shipment.shipper?.country || 'US') || {}).code)}
+                          </p>
+                          {shipment.createdAt && (
+                            <p className="mb-1">
+                              <strong>Created:</strong> {formatDate(shipment.createdAt)}
+                            </p>
+                          )}
+                          {shipment.brokerReviewedAt && (
+                            <p className="mb-1">
+                              <strong>Reviewed:</strong> {formatDate(shipment.brokerReviewedAt)}
+                            </p>
+                          )}
                           <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                             <div>
                               <p className="text-slate-500 text-xs">Shipper</p>
@@ -136,17 +148,7 @@ export function ShipmentBooking({ onNavigate }) {
                   <p className="text-slate-500 text-sm mb-1">Pre-Clear Token</p>
                   <p className="text-slate-900 font-mono text-sm mb-3">{shipment.token || shipment.preclearToken || shipment.PreclearToken}</p>
                   
-                  <div className="text-slate-600 text-xs">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Calendar className="w-3 h-3" />
-                      <span>Generated: {formatDate(shipment.tokenGeneratedAt)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-3 h-3" />
-                      <span>Reviewed: {formatDate(shipment.brokerReviewedAt)}</span>
-                    </div>
-                  </div>
-                </div>
+                      </div>
 
                 {/* Right: Action Button */}
                 <div className="lg:col-span-3 border-l border-slate-100 lg:pl-6 flex items-center">

@@ -7,14 +7,15 @@ export function ShipmentTokenList({ onNavigate }) {
   const [copiedToken, setCopiedToken] = useState(null);
 
   useEffect(() => {
-    // Get all shipments with generated tokens (check all token field variations)
+    // Get all shipments with generated tokens (exclude paid shipments)
     const allShipments = shipmentsStore.getAllShipments();
     const tokensShipments = allShipments.filter(s => {
       const hasToken = s.token || s.preclearToken || s.PreclearToken;
       const isTokenGenerated = s.status === 'token-generated' || s.Status === 'token-generated';
       const bothApproved = (s.aiApproval === 'approved' || s.AiApprovalStatus === 'approved') && 
                           (s.brokerApproval === 'approved' || s.BrokerApprovalStatus === 'approved');
-      return hasToken && (isTokenGenerated || bothApproved);
+      const isPaid = s.status === 'paid' || s.Status === 'paid' || s.paymentStatus === 'completed';
+      return hasToken && (isTokenGenerated || bothApproved) && !isPaid;
     });
     setShipments(tokensShipments);
 
@@ -26,7 +27,8 @@ export function ShipmentTokenList({ onNavigate }) {
         const isTokenGenerated = s.status === 'token-generated' || s.Status === 'token-generated';
         const bothApproved = (s.aiApproval === 'approved' || s.AiApprovalStatus === 'approved') && 
                             (s.brokerApproval === 'approved' || s.BrokerApprovalStatus === 'approved');
-        return hasToken && (isTokenGenerated || bothApproved);
+        const isPaid = s.status === 'paid' || s.Status === 'paid' || s.paymentStatus === 'completed';
+        return hasToken && (isTokenGenerated || bothApproved) && !isPaid;
       });
       setShipments(tokensUpdated);
     });
@@ -132,7 +134,7 @@ export function ShipmentTokenList({ onNavigate }) {
                 {/* Middle: Shipment Details */}
                 <div className="lg:col-span-4 border-l border-slate-100 lg:pl-6">
                   <p className="text-slate-500 text-sm mb-1">Shipment Details</p>
-                  <p className="text-slate-900 mb-2">{shipment.productName}</p>
+                  <p className="text-slate-900 font-semibold mb-2">{shipment.title || shipment.productName || 'Shipment'}</p>
                   <p className="text-slate-600 text-sm mb-1">
                     <strong>ID:</strong> {shipment.id}
                   </p>
@@ -156,13 +158,15 @@ export function ShipmentTokenList({ onNavigate }) {
 
                 {/* Right: Dates and Actions */}
                 <div className="lg:col-span-3 border-l border-slate-100 lg:pl-6">
-                  <div className="mb-4">
-                    <div className="flex items-center gap-2 text-slate-600 text-sm mb-2">
-                      <Calendar className="w-4 h-4" />
-                      <span>Token Generated</span>
+                  {shipment.createdAt && (
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 text-slate-600 text-sm mb-2">
+                        <Calendar className="w-4 h-4" />
+                        <span>Created</span>
+                      </div>
+                      <p className="text-slate-900 text-sm">{formatDate(shipment.createdAt)}</p>
                     </div>
-                    <p className="text-slate-900 text-sm">{formatDate(shipment.tokenGeneratedAt)}</p>
-                  </div>
+                  )}
                   
                   <button
                     onClick={() => onNavigate('shipment-details', shipment)}

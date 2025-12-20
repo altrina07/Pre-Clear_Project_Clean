@@ -19,16 +19,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 export function BrokerDashboard({ onNavigate }) {
   const { shipments = [] } = useShipments();
 
-  // Derived groups (still available if you want to show counts)
-  const pendingShipments = shipments.filter(s =>
+  // Filter out completed shipments (paid, broker-approved, or token-generated)
+  const activeShipments = shipments.filter(s => 
+    s.status !== 'paid' && 
+    s.status !== 'token-generated' && 
+    s.brokerApproval !== 'approved'
+  );
+
+  // Derived groups (still available if you want to show counts) - use activeShipments
+  const pendingShipments = activeShipments.filter(s =>
     s.aiApproval === 'approved' &&
     (s.brokerApproval === 'pending' || s.brokerApproval === 'not-started')
   );
-  const newShipments = shipments.filter(s =>
+  const newShipments = activeShipments.filter(s =>
     s.status === 'documents-uploaded' || s.status === 'awaiting-ai'
   );
-  const documentsRequested = shipments.filter(s => s.status === 'document-requested');
-  const documentsResubmitted = shipments.filter(s =>
+  const documentsRequested = activeShipments.filter(s => s.status === 'document-requested');
+  const documentsResubmitted = activeShipments.filter(s =>
     s.status === 'awaiting-broker' && s.brokerApproval === 'documents-requested'
   );
 
@@ -38,7 +45,7 @@ export function BrokerDashboard({ onNavigate }) {
 
   // Notifications removed from dashboard header per user request
 
-  const approvedToday = shipments.filter(s =>
+  const approvedToday = activeShipments.filter(s =>
     s.brokerApproval === 'approved' &&
     s.brokerReviewedAt &&
     new Date(s.brokerReviewedAt).toDateString() === new Date().toDateString()
@@ -162,8 +169,8 @@ export function BrokerDashboard({ onNavigate }) {
     );
   };
 
-  // Use shipments array as the single combined table source
-  const allShipments = shipments;
+  // Use activeShipments array as the single combined table source
+  const allShipments = activeShipments;
 
   return (
     <div style={{ background: '#FBF9F6', minHeight: '100vh', paddingBottom: 48 }}>

@@ -278,16 +278,22 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
     // Auto-approve after exactly 3 seconds (demo mode)
     setTimeout(async () => {
       try {
-        // Update status to ai-approved
+        // Update status to ai-approved (backend + local/store) without waiting for a fetch
         await apiUpdateShipmentStatus(currentShipment.id, 'ai-approved');
-        
-        // Fetch updated shipment with latest data
-        const data = await getShipmentById(currentShipment.id);
-        const s = data?.shipment || data?.Shipment || data;
-        
-        if (s) {
-          setCurrentShipment(s);
-        }
+
+        const updated = {
+          ...(currentShipment || {}),
+          status: 'ai-approved',
+          Status: 'ai-approved',
+          aiApprovalStatus: 'approved',
+          AiApprovalStatus: 'approved',
+          brokerApprovalStatus: currentShipment?.brokerApprovalStatus ?? currentShipment?.BrokerApprovalStatus ?? 'not-started',
+          BrokerApprovalStatus: currentShipment?.BrokerApprovalStatus ?? currentShipment?.brokerApprovalStatus ?? 'not-started'
+        };
+
+        // Persist to store so all views see the evaluated state immediately
+        shipmentsStore.saveShipment(updated);
+        setCurrentShipment(updated);
       } catch (err) {
         console.error('AI approval error:', err);
         setError(err?.message || 'Failed to update AI approval');
@@ -322,6 +328,13 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
       
       if (s) {
         setCurrentShipment(s);
+        // Persist into store so broker and shipper views see assignment immediately
+        shipmentsStore.saveShipment({
+          ...s,
+          assignedBrokerId: s.assignedBrokerId ?? s.AssignedBrokerId,
+          brokerApprovalStatus: s.brokerApprovalStatus ?? s.BrokerApprovalStatus ?? 'pending',
+          status: s.status ?? s.Status ?? 'awaiting-broker'
+        });
       } else {
         setError('Failed to refresh shipment data');
       }
@@ -1121,7 +1134,7 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
                 </div>
               </div>
               
-              {currentShipment?.status !== 'token-generated' ? (
+              {currentShipment?.status !== 'token-generated' && !tokenVal ? (
                 <button
                   onClick={handleGenerateToken}
                   className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all shadow-lg flex items-center gap-2"
@@ -1170,23 +1183,39 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <span className="text-slate-600 text-sm">AI Evaluation</span>
                 <span className={`px-2 py-1 rounded text-xs ${
-                  currentShipment?.aiApproval === 'approved' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                  aiApproval === 'approved' ? 'bg-green-100 text-green-700' : aiApproval === 'pending' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
                 }`}>
-                  {currentShipment?.aiApproval === 'approved' ? 'Approved' : 'Pending'}
+                  {aiApproval === 'approved' ? 'Approved' : aiApproval === 'pending' ? 'In Review' : 'Pending'}
                 </span>
               </div>
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <span className="text-slate-600 text-sm">Broker Review</span>
                 <span className={`px-2 py-1 rounded text-xs ${
-                  currentShipment?.brokerApproval === 'approved' ? 'bg-green-100 text-green-700' : 
-                  currentShipment?.brokerApproval === 'pending' ? 'bg-blue-100 text-blue-700' :
-                  currentShipment?.brokerApproval === 'documents-requested' ? 'bg-red-100 text-red-700' :
+                  brokerApproval === 'approved' ? 'bg-green-100 text-green-700' : 
+                  brokerApproval === 'pending' ? 'bg-blue-100 text-blue-700' :
+                  brokerApproval === 'documents-requested' ? 'bg-red-100 text-red-700' :
                   'bg-slate-100 text-slate-600'
                 }`}>
-                  {currentShipment?.brokerApproval === 'approved' ? 'Approved' : 
-                   currentShipment?.brokerApproval === 'pending' ? 'In Review' :
-                   currentShipment?.brokerApproval === 'documents-requested' ? 'Docs Needed' :
-                   'Not Started'}
+                  {brokerApproval === 'approved' ? 'Approved' : 
+                   brokerApproval === 'pending' ? 'In Review' :
+                   brokerApproval === 'documents-requested' ? 'Docs Needed' :
+                   'Pending'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="text-slate-600 text-sm">Token Generation</span>
+                <span className={`px-2 py-1 rounded text-xs ${
+                  currentShipment?.status === 'token-generated' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {currentShipment?.status === 'token-generated' ? 'Generated' : 'Pending'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 text-sm">Payment Status</span>
+                <span className={`px-2 py-1 rounded text-xs ${
+                  currentShipment?.status === 'paid' || currentShipment?.paymentStatus === 'completed' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {currentShipment?.status === 'paid' || currentShipment?.paymentStatus === 'completed' ? 'Completed' : 'Pending'}
                 </span>
               </div>
               <div className="flex items-center justify-between">

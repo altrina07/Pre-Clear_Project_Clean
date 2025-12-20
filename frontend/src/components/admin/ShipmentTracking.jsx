@@ -1,23 +1,58 @@
 import { MapPin, Package, User, ChevronDown, ChevronUp } from 'lucide-react';
-import { useShipments } from '../../hooks/useShipments';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getAllShipments } from '../../api/shipments';
 
 export function ShipmentTracking() {
-  const { shipments = [] } = useShipments();
+  const [shipments, setShipments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [expandedShipmentId, setExpandedShipmentId] = useState(null);
 
+  useEffect(() => {
+    const fetchShipments = async () => {
+      try {
+        setLoading(true);
+        const data = await getAllShipments();
+        setShipments(data || []);
+      } catch (error) {
+        console.error('Error fetching shipments:', error);
+        setShipments([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchShipments();
+  }, []);
+
   const getStatusDisplay = (shipment) => {
-    const aiStatus = shipment.aiApproval === 'approved' ? 'AI Approved' : 
-                    shipment.aiApproval === 'rejected' ? 'AI Rejected' : 'AI Pending';
-    const brokerStatus = shipment.brokerApproval === 'approved' ? 'Broker Approved' : 
-                        shipment.brokerApproval === 'documents-requested' ? 'Docs Requested' : 'Broker Pending';
-    const paymentStatus = shipment.paymentStatus === 'completed' ? 'Paid' : 'Payment Pending';
+    const aiStatus = shipment.aiApprovalStatus === 'approved' ? 'AI Approved' : 
+                    shipment.aiApprovalStatus === 'rejected' ? 'AI Rejected' : 'AI Pending';
+    const brokerStatus = shipment.brokerApprovalStatus === 'approved' ? 'Broker Approved' : 
+                        shipment.brokerApprovalStatus === 'documents-requested' ? 'Docs Requested' : 'Broker Pending';
     
-    return `${aiStatus} | ${brokerStatus} | ${paymentStatus}`;
+    return `${aiStatus} | ${brokerStatus}`;
   };
 
   const getAssignedBroker = (shipment) => {
-    return shipment.brokerApproval !== 'not-started' ? 'John Broker' : 'Not Assigned';
+    return shipment.assignedBrokerId ? `Broker #${shipment.assignedBrokerId}` : 'Not Assigned';
+  };
+
+  const calculateTotalValue = (shipment) => {
+    if (shipment.customsValue) {
+      return shipment.customsValue;
+    }
+    // Calculate from products if available
+    if (shipment.packages && shipment.packages.length > 0) {
+      let total = 0;
+      shipment.packages.forEach(pkg => {
+        if (pkg.products && pkg.products.length > 0) {
+          pkg.products.forEach(product => {
+            total += (product.totalValue || 0);
+          });
+        }
+      });
+      return total > 0 ? total : 0;
+    }
+    return 0;
   };
 
   const toggleExpanded = (shipmentId) => {
@@ -30,8 +65,17 @@ export function ShipmentTracking() {
         <MapPin className="w-6 h-6" style={{ color: '#3A2B28' }} />
         <span>Shipment Tracking Overview</span>
       </h1>
-      <p className="text-slate-600 mb-8">Click on a shipment to view detailed shipper information</p>
-      <div className="space-y-3">
+      <p className="text-slate-600 mb-8">Complete list of all shipments with detailed information</p>
+      
+      {loading ? (
+        <div className="bg-white rounded-xl p-8 text-center">
+          <div className="inline-block">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div>
+          </div>
+          <p className="text-slate-600 mt-4">Loading shipments...</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
         {shipments.map((shipment) => {
           const isExpanded = expandedShipmentId === shipment.id;
           const currencyCode = shipment.currency || 'USD';
@@ -69,8 +113,8 @@ export function ShipmentTracking() {
 
                     <div className="flex items-center gap-4 ml-auto">
                       <div className="text-right hidden md:block">
-                        <p className="text-xs text-slate-500">Pickup Mode</p>
-                        <p className="text-sm font-medium text-slate-900">{shipment.pickupType || 'N/A'}</p>
+                        <p className="text-xs text-slate-500">Mode</p>
+                        <p className="text-sm font-medium text-slate-900">{shipment.mode || 'N/A'}</p>
                       </div>
                       <div className="text-right hidden lg:block">
                         <p className="text-xs text-slate-500">Broker</p>
@@ -127,6 +171,41 @@ export function ShipmentTracking() {
                       </div>
                     </div>
 
+                    {/* Consignee Details */}
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-semibold text-slate-900 mb-4" style={{ color: '#2F1B17' }}>Consignee Details</h3>
+                        <div className="space-y-3 bg-slate-50 p-4 rounded-lg">
+                          <div>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Company</p>
+                            <p className="text-slate-900 font-medium">{shipment.consignee?.company || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Contact Person</p>
+                            <p className="text-slate-900">{shipment.consignee?.contactName || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Email</p>
+                            <p className="text-slate-900">{shipment.consignee?.email || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Phone</p>
+                            <p className="text-slate-900">{shipment.consignee?.phone || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Address</p>
+                            <p className="text-slate-900">
+                              {shipment.consignee?.address || 'N/A'}, {shipment.consignee?.city || ''}, {shipment.consignee?.state || ''} {shipment.consignee?.postalCode || ''}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Country</p>
+                            <p className="text-slate-900">{shipment.consignee?.country || 'N/A'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Shipment Details */}
                     <div className="space-y-4">
                       <div>
@@ -137,12 +216,20 @@ export function ShipmentTracking() {
                             <p className="text-slate-900 font-mono">#{shipment.id}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-slate-600 uppercase tracking-wide">Total Value</p>
-                            <p className="text-slate-900 font-medium">{currencySymbol}{parseFloat(shipment.value || 0).toLocaleString()} {currencyCode}</p>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Title</p>
+                            <p className="text-slate-900">{shipment.title || 'N/A'}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-slate-600 uppercase tracking-wide">Pickup Type</p>
-                            <p className="text-slate-900">{shipment.pickupType || 'N/A'}</p>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Mode</p>
+                            <p className="text-slate-900">{shipment.mode || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Total Value</p>
+                            <p className="text-slate-900 font-medium">{currencySymbol}{parseFloat(calculateTotalValue(shipment)).toLocaleString()} {currencyCode}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Service Level</p>
+                            <p className="text-slate-900">{shipment.serviceLevel || 'N/A'}</p>
                           </div>
                           <div>
                             <p className="text-xs text-slate-600 uppercase tracking-wide">Destination</p>
@@ -150,39 +237,47 @@ export function ShipmentTracking() {
                               {shipment.consignee?.city || 'N/A'}, {shipment.consignee?.country || 'N/A'}
                             </p>
                           </div>
+                          <div>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Token</p>
+                            <p className="text-slate-900 font-mono text-sm">{shipment.preclearToken || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Created Date</p>
+                            <p className="text-slate-900">{shipment.createdAt ? new Date(shipment.createdAt).toLocaleDateString() : 'N/A'}</p>
+                          </div>
                           <div className="pt-2">
                             <p className="text-xs text-slate-600 uppercase tracking-wide mb-2">Approval Status</p>
                             <div className="space-y-1">
                               <div className="flex items-center justify-between">
                                 <span className="text-sm text-slate-700">AI Review:</span>
                                 <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  shipment.aiApproval === 'approved' ? 'bg-green-100 text-green-700' :
-                                  shipment.aiApproval === 'rejected' ? 'bg-red-100 text-red-700' :
+                                  shipment.aiApprovalStatus === 'approved' ? 'bg-green-100 text-green-700' :
+                                  shipment.aiApprovalStatus === 'rejected' ? 'bg-red-100 text-red-700' :
                                   'bg-yellow-100 text-yellow-700'
                                 }`}>
-                                  {shipment.aiApproval === 'approved' ? 'Approved' :
-                                   shipment.aiApproval === 'rejected' ? 'Rejected' : 'Pending'}
+                                  {shipment.aiApprovalStatus === 'approved' ? 'Approved' :
+                                   shipment.aiApprovalStatus === 'rejected' ? 'Rejected' : 'Pending'}
                                 </span>
                               </div>
                               <div className="flex items-center justify-between">
                                 <span className="text-sm text-slate-700">Broker Review:</span>
                                 <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  shipment.brokerApproval === 'approved' ? 'bg-green-100 text-green-700' :
-                                  shipment.brokerApproval === 'documents-requested' ? 'bg-blue-100 text-blue-700' :
-                                  shipment.brokerApproval === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                  shipment.brokerApprovalStatus === 'approved' ? 'bg-green-100 text-green-700' :
+                                  shipment.brokerApprovalStatus === 'documents-requested' ? 'bg-blue-100 text-blue-700' :
+                                  shipment.brokerApprovalStatus === 'pending' ? 'bg-yellow-100 text-yellow-700' :
                                   'bg-slate-100 text-slate-700'
                                 }`}>
-                                  {shipment.brokerApproval === 'approved' ? 'Approved' :
-                                   shipment.brokerApproval === 'documents-requested' ? 'Docs Requested' :
-                                   shipment.brokerApproval === 'pending' ? 'Pending' : 'Not Started'}
+                                  {shipment.brokerApprovalStatus === 'approved' ? 'Approved' :
+                                   shipment.brokerApprovalStatus === 'documents-requested' ? 'Docs Requested' :
+                                   shipment.brokerApprovalStatus === 'pending' ? 'Pending' : 'Not Started'}
                                 </span>
                               </div>
                               <div className="flex items-center justify-between">
-                                <span className="text-sm text-slate-700">Payment:</span>
+                                <span className="text-sm text-slate-700">Status:</span>
                                 <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  shipment.paymentStatus === 'completed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                  shipment.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                                 }`}>
-                                  {shipment.paymentStatus === 'completed' ? 'Paid' : 'Pending'}
+                                  {shipment.status}
                                 </span>
                               </div>
                             </div>
@@ -203,7 +298,8 @@ export function ShipmentTracking() {
             <p className="text-slate-600">No shipments found</p>
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
