@@ -15,13 +15,15 @@ namespace PreClear.Api.Services
         private readonly ILogger<ShipmentService> _logger;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IAiService _aiService;
+        private readonly INotificationService _notificationService;
 
-        public ShipmentService(IShipmentRepository repo, ILogger<ShipmentService> logger, IHttpContextAccessor httpContextAccessor, IAiService aiService)
+        public ShipmentService(IShipmentRepository repo, ILogger<ShipmentService> logger, IHttpContextAccessor httpContextAccessor, IAiService aiService, INotificationService notificationService)
         {
             _repo = repo;
             _logger = logger;
             _httpContextAccessor = httpContextAccessor;
             _aiService = aiService;
+            _notificationService = notificationService;
         }
 
         /// <summary>
@@ -55,6 +57,140 @@ namespace PreClear.Api.Services
         public async Task<List<Shipment>> GetAllShipmentsAsync()
         {
             return await _repo.GetAllShipmentsAsync();
+        }
+
+        /// <summary>
+        /// Get all shipments with complete details (parties, packages, items, services)
+        /// Used for admin tracking page
+        /// </summary>
+        public async Task<List<NormalizedShipmentDto>> GetAllShipmentsDetailedAsync()
+        {
+            var allShipments = await _repo.GetAllShipmentsAsync();
+            var result = new List<NormalizedShipmentDto>();
+
+            foreach (var shipment in allShipments)
+            {
+                var detail = await GetDetailAsync(shipment.Id);
+                if (detail != null)
+                {
+                    var normalized = NormalizeShipmentDetail(detail);
+                    result.Add(normalized);
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Convert ShipmentDetailDto to NormalizedShipmentDto
+        /// </summary>
+        private NormalizedShipmentDto NormalizeShipmentDetail(ShipmentDetailDto detail)
+        {
+            var s = detail.Shipment;
+            var shipper = detail.Parties.FirstOrDefault(p => p.PartyType == "shipper");
+            var consignee = detail.Parties.FirstOrDefault(p => p.PartyType == "consignee");
+
+            // Build packages with products
+            var packagesById = detail.Packages.ToDictionary(p => p.Id);
+            var productsByPackage = detail.Items.GroupBy(i => i.PackageId).ToDictionary(g => g.Key, g => g.ToList());
+
+            var packages = new List<PackageView>();
+            foreach (var pkg in detail.Packages)
+            {
+                var packageView = new PackageView
+                {
+                    type = pkg.PackageType,
+                    length = pkg.Length,
+                    width = pkg.Width,
+                    height = pkg.Height,
+                    dimUnit = pkg.DimensionUnit,
+                    weight = pkg.Weight,
+                    weightUnit = pkg.WeightUnit,
+                    stackable = pkg.IsStackable,
+                    products = new List<ProductView>()
+                };
+
+                // Add products for this package
+                if (productsByPackage.TryGetValue(pkg.Id, out var items))
+                {
+                    foreach (var item in items)
+                    {
+                        packageView.products.Add(new ProductView
+                        {
+                            name = item.ProductName,
+                            description = item.Description,
+                            category = item.Category,
+                            hsCode = item.HsCode,
+                            qty = item.Quantity,
+                            uom = item.UnitOfMeasure,
+                            unitPrice = item.UnitPrice,
+                            totalValue = item.TotalPrice,
+                            originCountry = item.OriginCountry,
+                            reasonForExport = item.ReasonForExport
+                        });
+                    }
+                }
+
+                packages.Add(packageView);
+            }
+
+            var normalized = new NormalizedShipmentDto
+            {
+                id = s.Id,
+                referenceId = s.ReferenceId,
+                title = s.ShipmentName,
+                mode = s.Mode,
+                shipmentType = s.ShipmentType,
+                serviceLevel = s.ServiceLevel,
+                currency = s.Currency,
+                customsValue = s.CustomsValue,
+                status = s.Status,
+                aiApprovalStatus = s.AiApprovalStatus,
+                brokerApprovalStatus = s.BrokerApprovalStatus,
+                aiComplianceScore = s.AiComplianceScore,
+                preclearToken = s.PreclearToken,
+                tokenGeneratedAt = s.TokenGeneratedAt,
+                assignedBrokerId = s.AssignedBrokerId,
+                createdAt = s.CreatedAt,
+                updatedAt = s.UpdatedAt,
+                shipper = shipper == null ? null : new PartyView
+                {
+                    company = shipper.CompanyName,
+                    contactName = shipper.ContactName,
+                    phone = shipper.Phone,
+                    email = shipper.Email,
+                    address1 = shipper.Address1,
+                    address2 = shipper.Address2,
+                    city = shipper.City,
+                    state = shipper.State,
+                    postalCode = shipper.PostalCode,
+                    country = shipper.Country,
+                    taxId = shipper.TaxId
+                },
+                consignee = consignee == null ? null : new PartyView
+                {
+                    company = consignee.CompanyName,
+                    contactName = consignee.ContactName,
+                    phone = consignee.Phone,
+                    email = consignee.Email,
+                    address1 = consignee.Address1,
+                    address2 = consignee.Address2,
+                    city = consignee.City,
+                    state = consignee.State,
+                    postalCode = consignee.PostalCode,
+                    country = consignee.Country,
+                    taxId = consignee.TaxId
+                },
+                packages = packages,
+                services = new ServiceView
+                {
+                    serviceLevel = s.ServiceLevel,
+                    currency = s.Currency,
+                    customsValue = s.CustomsValue
+                }
+            };
+
+            return normalized;
         }
 
         public async Task<Shipment?> GetByIdAsync(long id)
@@ -367,6 +503,14 @@ namespace PreClear.Api.Services
             s.Status = status;
             s.UpdatedAt = DateTime.UtcNow;
             
+            // Auto-set ai_approval_status when status is ai-approved
+            if (status == "ai-approved")
+            {
+                s.AiApprovalStatus = "approved";
+                s.AiComplianceScore = s.AiComplianceScore ?? 85; // Default score
+                _logger.LogInformation("UpdateStatusAsync: Auto-set AI approval to 'approved' for shipment {ShipmentId}", shipmentId);
+            }
+            
             try
             {
                 await _repo.UpdateAsync(s);
@@ -457,6 +601,22 @@ namespace PreClear.Api.Services
                 _logger.LogInformation(
                     "GenerateTokenIfBothApprovalsCompleteAsync: Successfully generated token for shipment {ShipmentId} at {Timestamp}, status set to token-generated",
                     shipmentId, shipment.TokenGeneratedAt);
+
+                // Create notification for shipper about token generation
+                try
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        shipment.CreatedBy,
+                        "token_generated",
+                        "Preclear Token Generated",
+                        $"Your preclear token for shipment #{shipmentId} is ready: {token}",
+                        shipmentId
+                    );
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogError(notifEx, "Failed to create token generation notification for shipment {ShipmentId}", shipmentId);
+                }
 
                 return (true, token);
             }

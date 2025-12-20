@@ -510,9 +510,23 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
             <h3 className="text-slate-900 mb-4">Shipment Summary</h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between"><span className="text-slate-600">Shipment ID:</span><span className="text-slate-900">{currentShipment.id}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Title:</span><span className="text-slate-900">{currentShipment.title || 'N/A'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Mode:</span><span className="text-slate-900">{currentShipment.mode || 'N/A'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Weight:</span><span className="text-slate-900">{currentShipment.weight ? `${currentShipment.weight} ${currentShipment.weightUnit || 'kg'}` : 'N/A'}</span></div>
               <div className="flex justify-between"><span className="text-slate-600">Status:</span><span className="text-slate-900">{currentShipment.status}</span></div>
-              <div className="flex justify-between"><span className="text-slate-600">AI Approval:</span><span className={currentShipment.aiApproval === 'approved' ? 'text-green-600' : 'text-amber-600'}>{currentShipment.aiApproval}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">AI Approval:</span><span className={currentShipment.aiApproval === 'approved' ? 'text-green-600' : currentShipment.aiApproval === 'rejected' ? 'text-red-600' : 'text-amber-600'}>{currentShipment.aiApproval || 'pending'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Broker Approval:</span><span className={currentShipment.brokerApproval === 'approved' ? 'text-green-600' : currentShipment.brokerApproval === 'rejected' ? 'text-red-600' : 'text-amber-600'}>{currentShipment.brokerApproval || 'pending'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">AI Score:</span><span className={currentShipment.aiComplianceScore >= 80 ? 'text-green-600' : currentShipment.aiComplianceScore >= 60 ? 'text-amber-600' : 'text-red-600'}>{currentShipment.aiComplianceScore ? `${currentShipment.aiComplianceScore}%` : 'N/A'}</span></div>
+              {currentShipment.preclearToken && (
+                <div className="flex justify-between"><span className="text-slate-600">Token:</span><span className="text-slate-900 font-mono text-xs">{currentShipment.preclearToken}</span></div>
+              )}
               <div className="flex justify-between"><span className="text-slate-600">Created:</span><span className="text-slate-900">{currentShipment.createdAt ? new Date(currentShipment.createdAt).toLocaleDateString() : ''}</span></div>
+              {currentShipment.aiReviewedAt && (
+                <div className="flex justify-between"><span className="text-slate-600">AI Reviewed:</span><span className="text-slate-900">{new Date(currentShipment.aiReviewedAt).toLocaleDateString()}</span></div>
+              )}
+              {currentShipment.brokerReviewedAt && (
+                <div className="flex justify-between"><span className="text-slate-600">Broker Reviewed:</span><span className="text-slate-900">{new Date(currentShipment.brokerReviewedAt).toLocaleDateString()}</span></div>
+              )}
             </div>
           </div>
           {/* Quick Actions (moved to right panel) */}

@@ -1,5 +1,11 @@
 import http from './http';
 
+// Fetch all shipments (admin endpoint - uses my-shipments with admin role)
+export async function getAllShipments() {
+  const resp = await http.get('/shipments/my-shipments');
+  return resp.data;
+}
+
 // Fetch shipments for the authenticated user (JWT-derived)
 export async function getMyShipments() {
   const resp = await http.get('/shipments/user');

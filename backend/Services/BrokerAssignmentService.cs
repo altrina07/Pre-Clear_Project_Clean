@@ -21,11 +21,13 @@ namespace PreClear.Api.Services
     {
         private readonly PreclearDbContext _db;
         private readonly ILogger<BrokerAssignmentService> _logger;
+        private readonly INotificationService _notificationService;
 
-        public BrokerAssignmentService(PreclearDbContext db, ILogger<BrokerAssignmentService> logger)
+        public BrokerAssignmentService(PreclearDbContext db, ILogger<BrokerAssignmentService> logger, INotificationService notificationService)
         {
             _db = db;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         /// <summary>
@@ -99,6 +101,22 @@ namespace PreClear.Api.Services
                 await _db.SaveChangesAsync();
                 _logger.LogInformation("Assigned shipment {ShipmentId} to broker {BrokerId} ({BrokerName})",
                     shipmentId, selectedBroker.Id, selectedBroker.Company);
+
+                // Create notification for broker
+                try
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        selectedBroker.Id,
+                        "broker_assignment",
+                        "New Shipment Assigned",
+                        $"Shipment #{shipmentId} has been assigned to you for review.",
+                        shipmentId
+                    );
+                }
+                catch (Exception notifEx)
+                {
+                    _logger.LogError(notifEx, "Failed to create notification for broker {BrokerId} for shipment {ShipmentId}", selectedBroker.Id, shipmentId);
+                }
 
                 return true;
             }
@@ -197,8 +215,35 @@ namespace PreClear.Api.Services
                 if (categories == null || categories.Count == 0)
                     return false;
 
-                // At least one category must match
-                return targetCategories.Any(tc => categories.Any(bc => bc.Equals(tc, StringComparison.OrdinalIgnoreCase)));
+                // Check if any target category matches broker's categories (exact or range)
+                foreach (var target in targetCategories)
+                {
+                    if (!int.TryParse(target, out var targetChapter))
+                        continue;
+
+                    foreach (var brokerCat in categories)
+                    {
+                        // Check if it's a range (e.g., "10-15" or "84-85")
+                        if (brokerCat.Contains("-"))
+                        {
+                            var parts = brokerCat.Split('-');
+                            if (parts.Length == 2 && 
+                                int.TryParse(parts[0], out var start) && 
+                                int.TryParse(parts[1], out var end))
+                            {
+                                if (targetChapter >= start && targetChapter <= end)
+                                    return true;
+                            }
+                        }
+                        // Exact match
+                        else if (brokerCat.Equals(target, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
             }
             catch
             {

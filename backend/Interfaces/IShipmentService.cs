@@ -6,6 +6,7 @@ namespace PreClear.Api.Interfaces
         System.Threading.Tasks.Task<System.Collections.Generic.List<PreClear.Api.Models.ShipmentListItemDto>> GetUserListAsync(long userId);
         System.Threading.Tasks.Task<System.Collections.Generic.List<PreClear.Api.Models.ShipmentListItemDto>> GetBrokerListAsync(long brokerId);
         System.Threading.Tasks.Task<System.Collections.Generic.List<PreClear.Api.Models.Shipment>> GetAllShipmentsAsync();
+        System.Threading.Tasks.Task<System.Collections.Generic.List<PreClear.Api.Models.NormalizedShipmentDto>> GetAllShipmentsDetailedAsync();
         System.Threading.Tasks.Task<PreClear.Api.Models.Shipment> CreateAsync(PreClear.Api.Models.UpsertShipmentDto dto);
         System.Threading.Tasks.Task<PreClear.Api.Models.Shipment?> GetByIdAsync(long id);
         System.Threading.Tasks.Task<PreClear.Api.Models.ShipmentDetailDto?> GetDetailAsync(long id);

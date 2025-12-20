@@ -19,12 +19,14 @@ namespace PreClear.Api.Controllers
         private readonly IShipmentService _service;
         private readonly BrokerAssignmentService _brokerAssignment;
         private readonly ILogger<ShipmentsController> _logger;
+        private readonly INotificationService _notificationService;
 
-        public ShipmentsController(IShipmentService service, BrokerAssignmentService brokerAssignment, ILogger<ShipmentsController> logger)
+        public ShipmentsController(IShipmentService service, BrokerAssignmentService brokerAssignment, ILogger<ShipmentsController> logger, INotificationService notificationService)
         {
             _service = service;
             _brokerAssignment = brokerAssignment;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         private static PreClear.Api.Models.NormalizedShipmentDto MapNormalized(PreClear.Api.Models.ShipmentDetailDto detail)
@@ -346,8 +348,8 @@ namespace PreClear.Api.Controllers
                 }
                 else if (role == "admin")
                 {
-                    // Admins see all shipments
-                    var allShipments = await _service.GetAllShipmentsAsync();
+                    // Admins see all shipments with full details
+                    var allShipments = await _service.GetAllShipmentsDetailedAsync();
                     _logger.LogInformation("GetMyShipments: Returning {Count} shipments for admin {UserId}", allShipments.Count, userId);
                     return Ok(allShipments);
                 }
@@ -622,6 +624,22 @@ namespace PreClear.Api.Controllers
                     shipment.Status = "broker-approved";
                     // Try to generate token if AI also approved
                     await _service.GenerateTokenIfBothApprovalsCompleteAsync(id);
+                    
+                    // Create notification for shipper about broker approval
+                    try
+                    {
+                        await _notificationService.CreateNotificationAsync(
+                            shipment.CreatedBy,
+                            "broker_approved",
+                            "Shipment Approved by Broker",
+                            $"Your shipment #{id} has been approved by the customs broker.",
+                            id
+                        );
+                    }
+                    catch (Exception notifEx)
+                    {
+                        _logger.LogError(notifEx, "Failed to create broker approval notification for shipment {ShipmentId}", id);
+                    }
                 }
                 else if (decision == "rejected")
                 {

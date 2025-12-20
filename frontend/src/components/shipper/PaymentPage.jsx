@@ -1,7 +1,8 @@
-import { CreditCard, CheckCircle, DollarSign, TrendingUp, Package, FileText, Shield, Truck } from 'lucide-react';
+import { CreditCard, CheckCircle, DollarSign, TrendingUp, Package, FileText, Shield, Truck, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { shipmentsStore } from '../../store/shipmentsStore';
 import { getCurrencyByCountry, formatCurrency } from '../../utils/validation';
+import { updateShipmentStatus } from '../../api/shipments';
 
 // Customs clearance configuration by destination country
 const CLEARANCE_CONFIG = {
@@ -72,6 +73,13 @@ const calculatePickupCharge = (originCountry) => {
 export function PaymentPage({ shipment, onNavigate }) {
   const [processing, setProcessing] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [showCardModal, setShowCardModal] = useState(false);
+  const [cardDetails, setCardDetails] = useState({
+    cardNumber: '',
+    cardName: '',
+    expiryDate: '',
+    cvv: ''
+  });
 
   // Get origin currency (all amounts shown in origin country currency)
   const originCurrency = getCurrencyByCountry(shipment?.shipper?.country || 'US');
@@ -108,14 +116,49 @@ export function PaymentPage({ shipment, onNavigate }) {
   const total = parseFloat(pricing.total || subtotal + tax || 0);
 
   const handlePayment = () => {
+    setShowCardModal(true);
+  };
+
+  const handleCardSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Basic validation
+    if (!cardDetails.cardNumber || !cardDetails.cardName || !cardDetails.expiryDate || !cardDetails.cvv) {
+      alert('Please fill in all card details');
+      return;
+    }
+    
     setProcessing(true);
-    setTimeout(() => {
+    setShowCardModal(false);
+    
+    try {
+      // Simulate payment processing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Update shipment status to paid
+      await updateShipmentStatus(shipment.id, 'paid');
+      
+      // Update local store
       shipmentsStore.completePayment(shipment.id);
+      const updated = shipmentsStore.getShipmentById(shipment.id);
+      if (updated) {
+        updated.status = 'paid';
+        updated.paymentStatus = 'completed';
+        const now = new Date().toISOString();
+        updated.paymentDate = now;
+        updated.bookingDate = now;  // Use payment date as booking date
+        shipmentsStore.saveShipment(updated);
+      }
+      
       setPaymentSuccess(true);
       setTimeout(() => {
-        onNavigate('dashboard');
+        onNavigate('booked-paid');
       }, 3000);
-    }, 2000);
+    } catch (error) {
+      console.error('Payment error:', error);
+      alert('Payment failed. Please try again.');
+      setProcessing(false);
+    }
   };
 
   if (paymentSuccess) {
@@ -298,6 +341,111 @@ export function PaymentPage({ shipment, onNavigate }) {
           </div>
         </div>
       </div>
+
+      {/* Card Details Modal */}
+      {showCardModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 relative">
+            <button
+              onClick={() => setShowCardModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <h3 className="text-slate-900 text-xl mb-4 flex items-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              Enter Card Details
+            </h3>
+            
+            <form onSubmit={handleCardSubmit} className="space-y-4">
+              <div>
+                <label className="block text-slate-700 text-sm mb-2">Card Number</label>
+                <input
+                  type="text"
+                  placeholder="1234 5678 9012 3456"
+                  value={cardDetails.cardNumber}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\s/g, '').replace(/\D/g, '').slice(0, 16);
+                    const formatted = value.match(/.{1,4}/g)?.join(' ') || value;
+                    setCardDetails({...cardDetails, cardNumber: formatted});
+                  }}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-slate-700 text-sm mb-2">Cardholder Name</label>
+                <input
+                  type="text"
+                  placeholder="JOHN DOE"
+                  value={cardDetails.cardName}
+                  onChange={(e) => setCardDetails({...cardDetails, cardName: e.target.value.toUpperCase()})}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-700 text-sm mb-2">Expiry Date</label>
+                  <input
+                    type="text"
+                    placeholder="MM/YY"
+                    value={cardDetails.expiryDate}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      if (value.length >= 2) {
+                        value = value.slice(0, 2) + '/' + value.slice(2);
+                      }
+                      setCardDetails({...cardDetails, expiryDate: value});
+                    }}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-slate-700 text-sm mb-2">CVV</label>
+                  <input
+                    type="text"
+                    placeholder="123"
+                    value={cardDetails.cvv}
+                    onChange={(e) => setCardDetails({...cardDetails, cvv: e.target.value.replace(/\D/g, '').slice(0, 3)})}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 text-xs text-blue-800">
+                <p className="flex items-center gap-1">
+                  <Shield className="w-3 h-3" />
+                  Your payment information is secure and encrypted
+                </p>
+              </div>
+              
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCardModal(false)}
+                  className="flex-1 px-4 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  Pay {formatCurrency(total, shipment?.currency || originCurrency.code)}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

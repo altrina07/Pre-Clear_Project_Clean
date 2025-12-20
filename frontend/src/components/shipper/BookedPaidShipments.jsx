@@ -9,6 +9,8 @@ export function BookedPaidShipments({ onNavigate }) {
 
   useEffect(() => {
     const filtered = allShipments.filter(s =>
+      s.status === 'paid' ||
+      s.Status === 'paid' ||
       s.paymentStatus === 'completed' ||
       s.status === 'payment-completed' ||
       s.status === 'ready-for-booking' ||
@@ -46,14 +48,18 @@ export function BookedPaidShipments({ onNavigate }) {
               <tbody>
                 {list.map((s) => {
                   const currency = getCurrencyByCountry(s.shipper?.country || s.originCountry || 'US');
+                  const formatDateOnly = (dateString) => {
+                    if (!dateString) return 'N/A';
+                    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  };
                   return (
-                    <tr key={s.id} className="hover:bg-slate-50">
+                    <tr key={s.id} className="hover:bg-slate-50 border-b border-slate-200">
                       <td className="p-3">#{s.id}</td>
                       <td className="p-3">{s.title || s.productName || 'N/A'}</td>
                       <td className="p-3"><strong>{s.shipper?.city || s.shipper?.country || 'N/A'}</strong> → <strong>{s.consignee?.city || s.consignee?.country || 'N/A'}</strong></td>
                       <td className="p-3">{formatCurrency(s.value || 0, s.currency || currency.code)}</td>
-                      <td className="p-3">{s.paymentStatus || 'N/A'}</td>
-                      <td className="p-3">{s.bookingDate ? new Date(s.bookingDate).toLocaleDateString() : 'N/A'}</td>
+                      <td className="p-3"><span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">{s.paymentStatus || 'Completed'}</span></td>
+                      <td className="p-3 text-sm text-slate-600">{s.paymentDate ? formatDateOnly(s.paymentDate) : s.paidAt ? formatDateOnly(s.paidAt) : s.bookingDate ? formatDateOnly(s.bookingDate) : 'N/A'}</td>
                       <td className="p-3 text-right">
                         <button
                           onClick={() => onNavigate('booked-shipment-details', s)}

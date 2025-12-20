@@ -12,34 +12,39 @@ export function ShipperDashboard({ onNavigate }) {
   const [filterStatus, setFilterStatus] = useState('all');
   const [viewingDocuments, setViewingDocuments] = useState(null);
   
+  // Exclude paid shipments from all categories
+  const activeShipments = allShipments.filter(s => 
+    s.status !== 'paid' && s.Status !== 'paid' && s.paymentStatus !== 'completed'
+  );
+  
   // Categorize shipments
-  const pendingReview = allShipments.filter(s => 
+  const pendingReview = activeShipments.filter(s => 
     s.status === 'draft' || 
     s.status === 'documents-uploaded' || 
     s.status === 'document-requested'
   );
   
-  const inReview = allShipments.filter(s => 
+  const inReview = activeShipments.filter(s => 
     s.status === 'awaiting-ai' || 
     s.status === 'awaiting-broker' ||
     (s.aiApproval === 'pending' || s.brokerApproval === 'pending')
   );
   
-  const cleared = allShipments.filter(s => 
+  const cleared = activeShipments.filter(s => 
     s.status === 'token-generated' || 
     (s.aiApproval === 'approved' && s.brokerApproval === 'approved')
   );
   
-  const cancelled = allShipments.filter(s => s.status === 'cancelled');
+  const cancelled = activeShipments.filter(s => s.status === 'cancelled');
   
   // Filter shipments based on selected status
   const getFilteredShipments = () => {
-    if (filterStatus === 'all') return allShipments;
+    if (filterStatus === 'all') return activeShipments;
     if (filterStatus === 'pending') return pendingReview;
     if (filterStatus === 'review') return inReview;
     if (filterStatus === 'cleared') return cleared;
     if (filterStatus === 'cancelled') return cancelled;
-    return allShipments;
+    return activeShipments;
   };
   
   const filteredShipments = getFilteredShipments();
