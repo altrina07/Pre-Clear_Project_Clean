@@ -43,33 +43,25 @@ coverage/
 
 # TypeScript
 *.tsbuildinfo
-<<<<<<< HEAD
-<<<<<<< HEAD
+
 # .NET build artifacts
 backend/bin/
 backend/obj/
-=======
-.dll
-.exe
-.json
-.pdb
+*.dll
+*.exe
+*.pdb
 
-/backend/obj/
->>>>>>> 0439e845ff88249abc3f2b19bdf2f172ebafe499
-=======
+# Sensitive config files (use user-secrets instead)
+backend/appsettings.Development.json
+backend/appsettings.*.json
 
-/backend/obj/
->>>>>>> 0439e845ff88249abc3f2b19bdf2f172ebafe499
-
-__pycache__/
-*.pyc
 # Python virtual environment
 venv/
 .venv/
 env/
-
-# Python cache
 __pycache__/
 *.pyc
-.venv 
+
+# Environment
 .env
+.env.local
