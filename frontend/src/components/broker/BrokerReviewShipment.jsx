@@ -19,6 +19,7 @@ import { getShipmentById } from '../../api/shipments';
 import { getCurrencyByCountry } from '../../utils/validation';
 import { ShipmentChatPanel } from '../ShipmentChatPanel';
 import { shipmentsStore } from '../../store/shipmentsStore';
+import ShipmentDocumentsPanel from '../shipper/ShipmentDocumentsPanel';
 
 const formatTimeWithAmPm = (timeString) => {
   if (!timeString) return 'N/A';
@@ -32,6 +33,7 @@ const formatTimeWithAmPm = (timeString) => {
 export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigate }) {
   const { brokerApprove, brokerDeny } = useShipments();
   const [currentShipment, setCurrentShipment] = useState(initialShipment || {});
+  const [shipmentLoaded, setShipmentLoaded] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
   const [showDenyModal, setShowDenyModal] = useState(false);
@@ -76,16 +78,25 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
   // Fetch full shipment details from backend for source-of-truth
   useEffect(() => {
     const shipmentId = initialShipment?.id;
-    if (!shipmentId) return;
+    if (!shipmentId) {
+      setShipmentLoaded(false);
+      return;
+    }
+    console.log('[BrokerReviewShipment] Fetching full details for shipmentId:', shipmentId);
     (async () => {
       try {
         const full = await getShipmentById(shipmentId);
         if (full && full.id) {
+          console.log('[BrokerReviewShipment] Loaded shipment with ID:', full.id, 'type:', typeof full.id);
           setCurrentShipment(full);
+          setShipmentLoaded(true);
+        } else {
+          setShipmentLoaded(false);
         }
       } catch (e) {
         // non-fatal, keep initial shipment
         console.warn('Failed to load full shipment detail:', e.message);
+        setShipmentLoaded(false);
       }
     })();
   }, [initialShipment?.id]);
@@ -166,6 +177,9 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
       {/* Main content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
+          {currentShipment?.id && (
+            <ShipmentDocumentsPanel shipmentId={currentShipment.id} allowUpload={false} />
+          )}
           
           {/* Comprehensive Shipment Details */}
           <div className="bg-white rounded-xl p-6 border border-slate-200">

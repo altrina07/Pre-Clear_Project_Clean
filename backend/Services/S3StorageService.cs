@@ -2,6 +2,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Transfer;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PreClear.Api.Interfaces;
 using PreClear.Api.Models;
@@ -61,6 +62,49 @@ namespace PreClear.Api.Services
             catch (Exception ex)
             {
                 _logger.LogError($"Error uploading file: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task<string> UploadStreamAsync(Stream content, string fileName, string contentType, string folder)
+        {
+            if (content == null || content.Length == 0)
+                throw new ArgumentException("Stream cannot be null or empty", nameof(content));
+
+            try
+            {
+                if (content.CanSeek)
+                {
+                    content.Position = 0;
+                }
+
+                var baseName = Path.GetFileNameWithoutExtension(fileName);
+                var ext = Path.GetExtension(fileName);
+                var safeBase = string.IsNullOrWhiteSpace(baseName) ? "file" : baseName;
+                var uniqueFileName = $"{safeBase}_{Guid.NewGuid()}{ext}";
+                var key = string.IsNullOrEmpty(folder) ? uniqueFileName : $"{folder}/{uniqueFileName}";
+
+                var putRequest = new PutObjectRequest
+                {
+                    BucketName = _s3Settings.BucketName,
+                    Key = key,
+                    InputStream = content,
+                    ContentType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType,
+                    ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256
+                };
+
+                await _s3Client.PutObjectAsync(putRequest);
+                _logger.LogInformation($"Stream uploaded successfully: {key}");
+                return key;
+            }
+            catch (AmazonS3Exception ex)
+            {
+                _logger.LogError($"S3 error uploading stream: {ex.Message}");
+                throw new InvalidOperationException($"Error uploading stream to S3: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error uploading stream: {ex.Message}");
                 throw;
             }
         }

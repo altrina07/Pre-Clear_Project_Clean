@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { shipmentsStore } from '../store/shipmentsStore';
 import { getMyShipments, pollShipmentStatus, brokerApprove as brokerApproveApi } from '../api/shipments';
+import { uploadShipmentDocument, markShipmentDocument } from '../api/documents';
 
 export function useShipments() {
   const [shipments, setShipments] = useState(shipmentsStore.getAllShipments());
@@ -211,8 +212,22 @@ export function useShipments() {
         throw e;
       }
     },
-    uploadDocument: (shipmentId, docName, docType) => 
-      shipmentsStore.uploadDocument(shipmentId, docName, docType),
+    uploadDocument: async (shipmentId, file, docType) => {
+      const uploaded = await uploadShipmentDocument(shipmentId, file, docType);
+      // best-effort mark uploaded by name for backend tracking
+      try {
+        await markShipmentDocument(shipmentId, file.name);
+      } catch { /* non-fatal */ }
+
+      // reflect minimal metadata in store for legacy UI
+      const shipment = shipmentsStore.getShipmentById(shipmentId);
+      if (shipment) {
+        const docName = file.name;
+        shipmentsStore.uploadDocument(shipmentId, docName, docType || 'document');
+      }
+
+      return uploaded;
+    },
     bookShipment: (id, bookingDate, estimatedDelivery, amount) => 
       shipmentsStore.bookShipment(id, bookingDate, estimatedDelivery, amount),
     completePayment: (id) => shipmentsStore.completePayment(id),

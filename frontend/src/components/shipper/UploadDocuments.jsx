@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Upload, CheckCircle, FileText, AlertCircle, ArrowLeft, Send, Sparkles, Loader, Zap, XCircle, AlertTriangle } from 'lucide-react';
 import { shipmentsStore } from '../../store/shipmentsStore';
 import { useShipments } from '../../hooks/useShipments';
+import { uploadShipmentDocument, markShipmentDocument } from '../../api/documents';
 
 export function UploadDocuments({ shipment, onNavigate }) {
   const { importExportRules, updateAIApproval, requestBrokerApproval } = useShipments();
@@ -21,23 +22,27 @@ export function UploadDocuments({ shipment, onNavigate }) {
   const [aiResults, setAiResults] = useState(null);
   const [aiScore, setAiScore] = useState(0);
 
-  // Simulated upload function
-  const handleSimulatedUpload = (docName) => {
+  // Real upload function
+  const handleUpload = async (docName, file) => {
+    if (!file || !shipment?.id) return;
     setUploadingDoc(docName);
-    
-    // Simulate upload delay
-    setTimeout(() => {
+    try {
+      await uploadShipmentDocument(shipment.id, file, docName);
+      await markShipmentDocument(shipment.id, file.name);
+
       setDocuments(prev => prev.map(doc => 
         doc.name === docName 
-          ? { ...doc, status: 'uploaded', uploadedAt: new Date().toISOString() }
+          ? { ...doc, status: 'uploaded', uploadedAt: new Date().toISOString(), fileName: file.name }
           : doc
       ));
-      
-      // Upload to store
+
       shipmentsStore.uploadDocument(shipment.id, docName, 'document');
-      
+    } catch (err) {
+      console.error('Upload failed', err);
+      alert('Upload failed: ' + (err?.message || 'unknown error'));
+    } finally {
       setUploadingDoc(null);
-    }, 1500);
+    }
   };
 
   // Check if all required documents are uploaded and trigger AI automatically
@@ -320,26 +325,18 @@ export function UploadDocuments({ shipment, onNavigate }) {
                 </div>
 
                 <div className="ml-4">
-                  {doc.status === 'pending' && (
-                    <button
-                      onClick={() => handleSimulatedUpload(doc.name)}
-                      disabled={uploadingDoc === doc.name}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
+                  {(doc.status === 'pending' || doc.status === 'uploaded') && (
+                    <label className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
                       <Upload className="w-4 h-4" />
-                      Upload Document
-                    </button>
-                  )}
-                  
-                  {doc.status === 'uploaded' && (
-                    <button
-                      onClick={() => setDocuments(prev => prev.map(d => 
-                        d.name === doc.name ? { ...d, status: 'pending', uploadedAt: undefined } : d
-                      ))}
-                      className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm"
-                    >
-                      Re-upload
-                    </button>
+                      {uploadingDoc === doc.name ? 'Uploading...' : doc.status === 'uploaded' ? 'Re-upload' : 'Upload Document'}
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.xlsx,.csv,.jpg,.jpeg,.png,.gif"
+                        disabled={uploadingDoc === doc.name}
+                        onChange={(e) => handleUpload(doc.name, e.target.files?.[0])}
+                      />
+                    </label>
                   )}
                 </div>
               </div>

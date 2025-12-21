@@ -27,6 +27,7 @@ import { getShipmentById, pollShipmentStatus, submitAi, updateShipmentStatus as 
 import { ShipmentChatPanel } from '../ShipmentChatPanel';
 import { shipmentsStore } from '../../store/shipmentsStore';
 import { getCurrencyByCountry, formatCurrency } from '../../utils/validation';
+import ShipmentDocumentsPanel from './ShipmentDocumentsPanel';
 
 // Helper function to format time to 12-hour format with AM/PM
 const formatTimeWithAmPm = (timeString) => {
@@ -564,7 +565,13 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Main Workflow */}
         <div className="lg:col-span-2 space-y-6">
-                    
+          {currentShipment?.id && (
+            <ShipmentDocumentsPanel
+              shipmentId={currentShipment.id}
+              allowUpload={currentShipment?.status !== 'token-generated'}
+            />
+          )}
+
           {/* Comprehensive Shipment Details */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h2 className="text-slate-900 mb-6">Shipment Details</h2>
