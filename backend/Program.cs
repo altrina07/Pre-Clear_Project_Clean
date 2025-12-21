@@ -77,14 +77,26 @@ builder.Services.AddScoped<PreClear.Api.Services.BrokerAssignmentService>(); // 
 builder.Services.AddHttpContextAccessor(); // Add IHttpContextAccessor for JWT claims extraction
 
 // AWS S3 Configuration
+// AWS S3 Configuration - prefer user-secrets under "AWSS3" but fall back to "AwsS3Settings"
 builder.Services.Configure<AwsS3Settings>(builder.Configuration.GetSection("AwsS3Settings"));
 builder.Services.AddSingleton<IAmazonS3>(sp =>
 {
-    var s3Settings = sp.GetRequiredService<IOptions<AwsS3Settings>>().Value;
+    var config = sp.GetRequiredService<IConfiguration>();
+    var s3Settings = sp.GetService<IOptions<AwsS3Settings>>()?.Value ?? new AwsS3Settings();
+
+    var accessKey = config["AWSS3:AccessKey"] ?? config["AwsS3Settings:AccessKey"] ?? s3Settings.AccessKey;
+    var secretKey = config["AWSS3:SecretKey"] ?? config["AwsS3Settings:SecretKey"] ?? s3Settings.SecretKey;
+    var region = config["AWSS3:Region"] ?? config["AwsS3Settings:Region"] ?? s3Settings.Region ?? "us-east-1";
+
+    if (string.IsNullOrWhiteSpace(accessKey) || string.IsNullOrWhiteSpace(secretKey))
+    {
+        throw new InvalidOperationException("AWS S3 credentials are not configured. Set them in user secrets (AWSS3:AccessKey / AWSS3:SecretKey) or in configuration (AwsS3Settings).");
+    }
+
     return new AmazonS3Client(
-        s3Settings.AccessKey,
-        s3Settings.SecretKey,
-        Amazon.RegionEndpoint.GetBySystemName(s3Settings.Region ?? "us-east-1")
+        accessKey,
+        secretKey,
+        Amazon.RegionEndpoint.GetBySystemName(region)
     );
 });
 

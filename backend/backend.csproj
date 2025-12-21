@@ -1,10 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <DisableStaticWebAssets>true</DisableStaticWebAssets>
+    <UserSecretsId>6abcc7a8-717b-41f3-83e6-92a824f7d94f</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
