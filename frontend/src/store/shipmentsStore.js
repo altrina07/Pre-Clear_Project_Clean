@@ -557,6 +557,12 @@ class ShipmentsStore {
     this.notify();
   }
 
+  // Reset shipments list only (preserve messages/notifications)
+  resetShipmentsOnly() {
+    this.shipments = [];
+    this.notify();
+  }
+
   // Subscribe to changes
   subscribe(callback) {
     this.listeners.add(callback);
@@ -624,6 +630,14 @@ class ShipmentsStore {
     }
     
     this.notify();
+  }
+
+  removeShipment(id) {
+    const index = this.shipments.findIndex(s => s.id === id || s.id === String(id));
+    if (index >= 0) {
+      this.shipments.splice(index, 1);
+      this.notify();
+    }
   }
 
   // Update shipment status
@@ -849,13 +863,26 @@ class ShipmentsStore {
   // Chat messages
   getMessages(shipmentId) {
     if (shipmentId) {
-      return this.messages.filter(m => m.shipmentId === shipmentId);
+      return this.messages
+        .filter(m => m.shipmentId === shipmentId)
+        .sort((a, b) => new Date(a.timestamp || a.createdAt) - new Date(b.timestamp || b.createdAt));
     }
     return [...this.messages];
   }
 
   addMessage(message) {
-    this.messages.push(message);
+    const idx = this.messages.findIndex(m => m.id === message.id);
+    if (idx >= 0) {
+      this.messages[idx] = { ...this.messages[idx], ...message };
+    } else {
+      this.messages.push(message);
+    }
+    this.notify();
+  }
+
+  setMessagesForShipment(shipmentId, messages) {
+    // Replace all messages for shipmentId with the provided list
+    this.messages = this.messages.filter(m => m.shipmentId !== shipmentId).concat(messages);
     this.notify();
   }
 

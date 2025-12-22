@@ -28,5 +28,6 @@ namespace PreClear.Api.Models
         public string Status { get; set; } = string.Empty;
         public long? AssignedBrokerId { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 }

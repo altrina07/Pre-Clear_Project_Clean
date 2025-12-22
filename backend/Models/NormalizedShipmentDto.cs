@@ -17,6 +17,15 @@ namespace PreClear.Api.Models
         public string? serviceLevel { get; set; }
         public string? currency { get; set; } = "USD";
         public decimal? customsValue { get; set; }
+        public decimal? pricingTotal { get; set; }
+
+        // Pickup information
+        public string? pickupType { get; set; }
+        public string? pickupLocation { get; set; }
+        public DateTime? pickupDate { get; set; }
+        public string? pickupTimeEarliest { get; set; }
+        public string? pickupTimeLatest { get; set; }
+        public DateTime? estimatedDropoffDate { get; set; }
 
         // Status/approvals
         public string status { get; set; } = "draft";

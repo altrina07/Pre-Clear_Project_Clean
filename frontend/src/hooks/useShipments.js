@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { shipmentsStore } from '../store/shipmentsStore';
-import { getMyShipments, pollShipmentStatus, brokerApprove as brokerApproveApi } from '../api/shipments';
+import { getMyShipments, getShipmentById, pollShipmentStatus, brokerApprove as brokerApproveApi } from '../api/shipments';
 import { uploadShipmentDocument, markShipmentDocument } from '../api/documents';
+import { getShipmentMessages, sendMessage as sendChatMessage } from '../components/api/chat';
 
 export function useShipments() {
   const [shipments, setShipments] = useState(shipmentsStore.getAllShipments());
@@ -11,10 +12,53 @@ export function useShipments() {
   const pollIntervalRef = useRef(null);
 
   const mapBackendShipment = (s) => {
+    const rawPackages = s?.packages ?? s?.Packages ?? [];
+    const rawProducts = s?.products ?? s?.Products ?? [];
+    const uploadedDocuments = s?.uploadedDocuments ?? s?.documents ?? s?.Documents ?? {};
+    const customsValue = s?.customsValue ?? s?.value ?? 0;
+    const pricingTotal = s?.pricingTotal ?? s?.PricingTotal ?? s?.pricing_total ?? s?.pricing?.total ?? null;
+    const normalizeProduct = (p) => ({
+      name: p?.name ?? p?.Name ?? null,
+      description: p?.description ?? p?.Description ?? null,
+      category: p?.category ?? p?.Category ?? null,
+      hsCode: p?.hsCode ?? p?.HsCode ?? null,
+      qty: p?.qty ?? p?.quantity ?? p?.Quantity ?? 0,
+      uom: p?.uom ?? p?.unit ?? p?.Unit ?? 'pcs',
+      unitPrice: p?.unitPrice ?? p?.UnitPrice ?? p?.unit_price ?? 0,
+      totalValue: p?.totalValue ?? p?.TotalValue ?? (parseFloat(p?.unitPrice ?? p?.UnitPrice ?? p?.unit_price ?? 0) * parseFloat(p?.qty ?? p?.quantity ?? p?.Quantity ?? 0) || 0),
+      originCountry: p?.originCountry ?? p?.OriginCountry ?? null,
+      reasonForExport: p?.reasonForExport ?? p?.ExportReason ?? null,
+    });
+
+    const normalizePackage = (pkg) => ({
+      type: pkg?.type ?? pkg?.PackageType ?? null,
+      length: pkg?.length ?? pkg?.Length ?? 0,
+      width: pkg?.width ?? pkg?.Width ?? 0,
+      height: pkg?.height ?? pkg?.Height ?? 0,
+      dimUnit: pkg?.dimUnit ?? pkg?.DimensionUnit ?? 'cm',
+      weight: pkg?.weight ?? pkg?.Weight ?? 0,
+      weightUnit: pkg?.weightUnit ?? pkg?.WeightUnit ?? 'kg',
+      stackable: pkg?.stackable ?? pkg?.Stackable ?? false,
+      products: (pkg?.products ?? pkg?.Products ?? []).map(normalizeProduct),
+    });
+
+    const packages = rawPackages.map(normalizePackage);
+    const products = rawProducts.map(normalizeProduct);
+
+    const totalWeight = s?.totalWeight ?? s?.weight ?? packages.reduce((sum, pkg) => sum + (parseFloat(pkg?.weight) || 0), 0);
+    const totalQuantity = s?.totalQuantity ?? s?.quantity ?? packages.reduce((sum, pkg) => {
+      if (Array.isArray(pkg?.products)) {
+        return sum + pkg.products.reduce((inner, prod) => inner + (parseFloat(prod?.qty) || 0), 0);
+      }
+      return sum;
+    }, 0);
+    const firstProductName = s?.productName ?? products?.[0]?.name ?? null;
     const shipperCity = s?.shipper?.city ?? s?.originCity ?? s?.OriginCity;
     const shipperCountry = s?.shipper?.country ?? s?.originCountry ?? s?.OriginCountry;
     const consigneeCity = s?.consignee?.city ?? s?.destinationCity ?? s?.destCity ?? s?.DestinationCity;
     const consigneeCountry = s?.consignee?.country ?? s?.destinationCountry ?? s?.destCountry ?? s?.DestinationCountry;
+    const shipperParty = s?.shipper || {};
+    const consigneeParty = s?.consignee || {};
 
     return {
       id: s.id,
@@ -23,7 +67,19 @@ export function useShipments() {
       mode: s.mode,
       shipmentType: s.shipmentType,
       value: s.value ?? s.customsValue,
-      currency: s.currency,
+      customsValue,
+      currency: s.currency ?? s.Currency,
+      serviceLevel: s.serviceLevel ?? s.ServiceLevel ?? s.service_level ?? null,
+      pricingTotal,
+      pickupType: s.pickupType ?? s.PickupType ?? s.pickup_type ?? null,
+      pickupLocation: s.pickupLocation ?? s.PickupLocation ?? s.pickup_location ?? null,
+      pickupDate: s.pickupDate ?? s.PickupDate ?? s.pickup_date ?? null,
+      pickupTimeEarliest: s.pickupTimeEarliest ?? s.PickupTimeEarliest ?? s.pickup_time_earliest ?? null,
+      pickupTimeLatest: s.pickupTimeLatest ?? s.PickupTimeLatest ?? s.pickup_time_latest ?? null,
+      estimatedDropoffDate: s.estimatedDropoffDate ?? s.EstimatedDropoffDate ?? s.estimated_dropoff_date ?? null,
+      paymentStatus: s.paymentStatus ?? s.PaymentStatus,
+      paymentDate: s.paymentDate ?? s.PaymentDate ?? s.paidAt ?? s.PaidAt,
+      bookingDate: s.bookingDate ?? s.BookingDate ?? s.paymentDate ?? s.PaymentDate ?? s.paidAt ?? s.PaidAt,
       aiScore: s.aiComplianceScore,
       aiApproval: s.aiApprovalStatus ?? s.AiApprovalStatus,
       brokerApproval: s.brokerApprovalStatus ?? s.BrokerApprovalStatus,
@@ -32,16 +88,41 @@ export function useShipments() {
       preclearToken: s.preclearToken ?? s.PreclearToken ?? s.token,
       tokenGeneratedAt: s.tokenGeneratedAt ?? s.TokenGeneratedAt,
       createdAt: s.createdAt,
+      updatedAt: s.updatedAt ?? s.UpdatedAt,
       assignedBrokerId: s.assignedBrokerId ?? s.AssignedBrokerId ?? null,
+      packages,
+      products,
+      uploadedDocuments,
+      totalWeight,
+      totalQuantity,
+      weight: totalWeight,
+      quantity: totalQuantity,
+      productName: firstProductName,
       shipper: {
+        company: shipperParty.company ?? s.originCompany ?? s.shipperName,
+        contactName: shipperParty.contactName ?? null,
+        email: shipperParty.email ?? null,
+        phone: shipperParty.phone ?? null,
+        address1: shipperParty.address1 ?? null,
+        address2: shipperParty.address2 ?? null,
         city: shipperCity,
+        state: shipperParty.state ?? null,
+        postalCode: shipperParty.postalCode ?? null,
         country: shipperCountry,
-        company: s.originCompany ?? s.shipper?.company ?? s.shipperName
+        taxId: shipperParty.taxId ?? null
       },
       consignee: {
+        company: consigneeParty.company ?? s.destinationCompany ?? null,
+        contactName: consigneeParty.contactName ?? null,
+        email: consigneeParty.email ?? null,
+        phone: consigneeParty.phone ?? null,
+        address1: consigneeParty.address1 ?? null,
+        address2: consigneeParty.address2 ?? null,
         city: consigneeCity,
+        state: consigneeParty.state ?? null,
+        postalCode: consigneeParty.postalCode ?? null,
         country: consigneeCountry,
-        company: s.destinationCompany ?? s.consignee?.company
+        taxId: consigneeParty.taxId ?? null
       },
       originCountry: shipperCountry,
       destCountry: consigneeCountry
@@ -54,21 +135,44 @@ export function useShipments() {
       try {
         setIsLoading(true);
         setError(null);
-        // Ensure no stale data from prior users before fetching
-        shipmentsStore.clearShipments();
+        // Ensure no stale shipments before fetching (preserve messages)
+        shipmentsStore.resetShipmentsOnly();
         setShipments([]);
         
         // Fetch shipments for authenticated user; backend derives user from JWT and returns list DTO
         const backendShipments = await getMyShipments();
 
-        // Replace local store entirely with backend source-of-truth
-        shipmentsStore.clearShipments();
+        // Replace local store shipments with backend source-of-truth (preserve messages)
+        shipmentsStore.resetShipmentsOnly();
 
         if (Array.isArray(backendShipments)) {
           backendShipments.forEach(s => {
             const frontendShipment = mapBackendShipment(s);
             shipmentsStore.saveShipment(frontendShipment);
           });
+
+          // Enrich with shipper/consignee from shipment_parties when missing
+          try {
+            const toEnrich = shipmentsStore
+              .getAllShipments()
+              .filter(x => (
+                !x.shipper?.company || !x.consignee?.company ||
+                !x.shipper?.city || !x.consignee?.city ||
+                !x.shipper?.email || !x.consignee?.email ||
+                !x.shipper?.address1 || !x.consignee?.address1
+              ))
+              .map(x => x.id);
+
+            if (toEnrich.length > 0) {
+              const details = await Promise.allSettled(toEnrich.map(id => getShipmentById(id)));
+              details.forEach((res) => {
+                if (res.status === 'fulfilled' && res.value) {
+                  const mapped = mapBackendShipment(res.value);
+                  shipmentsStore.saveShipment(mapped);
+                }
+              });
+            }
+          } catch { /* enrichment best-effort */ }
         }
 
         // Update local state with latest store
@@ -100,12 +204,34 @@ export function useShipments() {
     const refresh = async () => {
       try {
         const backendShipments = await getMyShipments();
-        shipmentsStore.clearShipments();
+        shipmentsStore.resetShipmentsOnly();
         if (Array.isArray(backendShipments)) {
           backendShipments.forEach(s => {
             const frontendShipment = mapBackendShipment(s);
             shipmentsStore.saveShipment(frontendShipment);
           });
+
+          // Enrich parties on refresh as well
+          try {
+            const toEnrich = shipmentsStore
+              .getAllShipments()
+              .filter(x => (
+                !x.shipper?.company || !x.consignee?.company ||
+                !x.shipper?.city || !x.consignee?.city ||
+                !x.shipper?.email || !x.consignee?.email ||
+                !x.shipper?.address1 || !x.consignee?.address1
+              ))
+              .map(x => x.id);
+            if (toEnrich.length > 0) {
+              const details = await Promise.allSettled(toEnrich.map(id => getShipmentById(id)));
+              details.forEach((res) => {
+                if (res.status === 'fulfilled' && res.value) {
+                  const mapped = mapBackendShipment(res.value);
+                  shipmentsStore.saveShipment(mapped);
+                }
+              });
+            }
+          } catch { /* ignore */ }
         }
         setShipments(shipmentsStore.getAllShipments());
       } catch { /* ignore transient errors */ }
@@ -231,6 +357,41 @@ export function useShipments() {
     bookShipment: (id, bookingDate, estimatedDelivery, amount) => 
       shipmentsStore.bookShipment(id, bookingDate, estimatedDelivery, amount),
     completePayment: (id) => shipmentsStore.completePayment(id),
+    // Chat (broker/shipper)
+    loadShipmentMessages: async (shipmentId) => {
+      if (!shipmentId) return [];
+      const apiMessages = await getShipmentMessages(shipmentId);
+      const mapped = (apiMessages || []).map((m) => ({
+        id: m.id,
+        shipmentId: m.shipmentId,
+        senderId: m.senderId,
+        senderRole: m.senderRole || null,
+        sender: m.senderRole || undefined,
+        senderName: m.senderName || (m.senderId ? `User #${m.senderId}` : 'User'),
+        message: m.message,
+        timestamp: m.createdAt,
+        type: 'message'
+      }));
+      shipmentsStore.setMessagesForShipment(shipmentId, mapped);
+      return mapped;
+    },
+    sendShipmentMessage: async (shipmentId, message, senderName) => {
+      if (!shipmentId || !message) return null;
+      const m = await sendChatMessage(shipmentId, message);
+      const mapped = {
+        id: m.id,
+        shipmentId: m.shipmentId,
+        senderId: m.senderId,
+        senderRole: m.senderRole || null,
+        sender: m.senderRole || undefined,
+        senderName: m.senderName || senderName || (m.senderId ? `User #${m.senderId}` : 'User'),
+        message: m.message,
+        timestamp: m.createdAt,
+        type: 'message'
+      };
+      shipmentsStore.addMessage(mapped);
+      return mapped;
+    },
     // Rules operations
     addImportExportRule: (rule) => shipmentsStore.addImportExportRule(rule),
     updateImportExportRule: (id, rule) => shipmentsStore.updateImportExportRule(id, rule),

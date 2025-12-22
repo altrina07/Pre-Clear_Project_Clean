@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Send, Paperclip, MessageCircle } from 'lucide-react';
 import { shipmentsStore } from '../store/shipmentsStore';
+import { useShipments } from '../hooks/useShipments';
 
 const COLORS = {
   cream: '#FBF9F6',
@@ -14,23 +15,40 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
   const [newMessage, setNewMessage] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [chatViewingFile, setChatViewingFile] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const { loadShipmentMessages, sendShipmentMessage } = useShipments();
 
   useEffect(() => {
-    if (isOpen && shipmentId) {
-      loadMessages();
-      const unsubscribe = shipmentsStore.subscribe(loadMessages);
-      return unsubscribe;
-    }
+    if (!isOpen || !shipmentId) return undefined;
+
+    // Fetch once when opened
+    loadMessages();
+
+    // Keep in sync with store changes without re-fetching
+    const syncFromStore = () => setMessages(shipmentsStore.getMessages(shipmentId));
+    const unsubscribe = shipmentsStore.subscribe(syncFromStore);
+    return unsubscribe;
   }, [isOpen, shipmentId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const loadMessages = () => {
-    setMessages(shipmentsStore.getMessages(shipmentId));
+  const loadMessages = async () => {
+    if (!shipmentId) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      await loadShipmentMessages(shipmentId);
+    } catch (err) {
+      setError(err?.message || 'Unable to load messages');
+    } finally {
+      setMessages(shipmentsStore.getMessages(shipmentId));
+      setIsLoading(false);
+    }
   };
 
   const handleFileChange = (e) => {
@@ -74,20 +92,18 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
     }, 900);
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!newMessage.trim()) return;
-
-    shipmentsStore.addMessage({
-      id: `msg-${Date.now()}`,
-      shipmentId,
-      sender: userRole,
-      senderName: userName,
-      message: newMessage,
-      timestamp: new Date().toISOString(),
-      type: 'message'
-    });
-
-    setNewMessage('');
+    setIsLoading(true);
+    setError(null);
+    try {
+      await sendShipmentMessage(shipmentId, newMessage, userName);
+      setNewMessage('');
+    } catch (err) {
+      setError(err?.message || 'Unable to send message');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -118,6 +134,10 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        {isLoading && messages.length === 0 && (
+          <p className="text-xs text-slate-500">Loading messages...</p>
+        )}
         {messages.map(msg => {
           const own = msg.sender === userRole;
 
@@ -186,7 +206,7 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
 
           <button
             onClick={handleSendMessage}
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() || isLoading}
             className="w-10 h-10 flex items-center justify-center rounded-lg text-white"
             style={{ background: COLORS.coffeeLight }}
           >

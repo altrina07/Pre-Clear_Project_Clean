@@ -1,26 +1,48 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MessageCircle, Send, X, User } from 'lucide-react';
-import { useMessages } from '../hooks/useShipments';
+import { useMessages, useShipments } from '../hooks/useShipments';
 import { shipmentsStore } from '../store/shipmentsStore';
 
 export function ChatPanel({ shipmentId, userRole, userName, isOpen, onClose }) {
   const messages = useMessages(shipmentId);
   const [newMessage, setNewMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const { loadShipmentMessages, sendShipmentMessage } = useShipments();
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      if (!isOpen || !shipmentId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        await loadShipmentMessages(shipmentId);
+      } catch (err) {
+        setError(err?.message || 'Unable to load messages');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMessages();
+  }, [isOpen, shipmentId]);
 
   const handleSendMessage = () => {
     if (!newMessage.trim()) return;
+    const send = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        await sendShipmentMessage(shipmentId, newMessage, userName);
+        setNewMessage('');
+      } catch (err) {
+        setError(err?.message || 'Unable to send message');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    shipmentsStore.addMessage({
-      id: `msg-${Date.now()}`,
-      shipmentId,
-      sender: userRole,
-      senderName: userName,
-      message: newMessage,
-      timestamp: new Date().toISOString(),
-      type: 'message'
-    });
-
-    setNewMessage('');
+    send();
   };
 
   if (!isOpen) return null;
@@ -43,6 +65,10 @@ export function ChatPanel({ shipmentId, userRole, userName, isOpen, onClose }) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        {isLoading && messages.length === 0 && (
+          <div className="text-center text-slate-500 py-4 text-sm">Loading messages...</div>
+        )}
         {messages.length === 0 && (
           <div className="text-center text-slate-500 py-8">
             <MessageCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
@@ -98,7 +124,8 @@ export function ChatPanel({ shipmentId, userRole, userName, isOpen, onClose }) {
           />
           <button
             onClick={handleSendMessage}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+            disabled={!newMessage.trim() || isLoading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-60"
           >
             <Send className="w-4 h-4" />
           </button>

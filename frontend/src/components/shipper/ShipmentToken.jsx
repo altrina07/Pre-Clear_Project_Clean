@@ -73,8 +73,8 @@ export function ShipmentToken({ shipment, onNavigate }) {
               <h3 className="text-slate-900 mb-4">Approved Shipment Details</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-slate-600 text-sm mb-1">Shipment ID</p>
-                  <p className="text-slate-900">{shipment?.id || 'SHP-001'}</p>
+                  <p className="text-slate-600 text-sm mb-1">Reference ID</p>
+                  <p className="text-slate-900">{shipment?.referenceId || `#${shipment?.id || 'SHP-001'}`}</p>
                 </div>
                 <div>
                   <p className="text-slate-600 text-sm mb-1">Product</p>

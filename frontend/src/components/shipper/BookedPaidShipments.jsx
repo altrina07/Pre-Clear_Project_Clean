@@ -36,30 +36,24 @@ export function BookedPaidShipments({ onNavigate }) {
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-100">
-                  <th className="p-3 text-left">Shipment ID</th>
+                  <th className="p-3 text-left">Reference ID</th>
                   <th className="p-3 text-left">Title</th>
                   <th className="p-3 text-left">Route</th>
                   <th className="p-3 text-left">Value</th>
                   <th className="p-3 text-left">Payment</th>
-                  <th className="p-3 text-left">Booking Date</th>
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {list.map((s) => {
                   const currency = getCurrencyByCountry(s.shipper?.country || s.originCountry || 'US');
-                  const formatDateOnly = (dateString) => {
-                    if (!dateString) return 'N/A';
-                    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                  };
                   return (
                     <tr key={s.id} className="hover:bg-slate-50 border-b border-slate-200">
-                      <td className="p-3">#{s.id}</td>
+                      <td className="p-3">{s.referenceId || `#${s.id}`}</td>
                       <td className="p-3">{s.title || s.productName || 'N/A'}</td>
                       <td className="p-3"><strong>{s.shipper?.city || s.shipper?.country || 'N/A'}</strong> → <strong>{s.consignee?.city || s.consignee?.country || 'N/A'}</strong></td>
                       <td className="p-3">{formatCurrency(s.value || 0, s.currency || currency.code)}</td>
                       <td className="p-3"><span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">{s.paymentStatus || 'Completed'}</span></td>
-                      <td className="p-3 text-sm text-slate-600">{s.paymentDate ? formatDateOnly(s.paymentDate) : s.paidAt ? formatDateOnly(s.paidAt) : s.bookingDate ? formatDateOnly(s.bookingDate) : 'N/A'}</td>
                       <td className="p-3 text-right">
                         <button
                           onClick={() => onNavigate('booked-shipment-details', s)}

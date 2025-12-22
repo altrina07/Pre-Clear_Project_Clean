@@ -306,10 +306,11 @@ export function ApprovedShipviewpg({ shipment: initialShipment = {}, onNavigate 
                               <div key={prodIdx} className="text-sm bg-white p-2 rounded border border-slate-200">
                                 <p className="text-slate-900 font-medium">{prod.name || 'N/A'}</p>
                                 <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 mt-1">
+                                  <div>Category: {prod.category || 'N/A'}</div>
                                   <div>HS Code: {prod.hsCode || 'N/A'}</div>
                                   <div>Qty: {prod.qty || 0} {prod.uom || ''}</div>
-                                  <div>Unit Price: {currencySymbol}{prod.unitPrice || 0}</div>
-                                  <div>Total: {currencySymbol}{prod.totalValue || 0}</div>
+                                  <div>Unit Price: {formatCurrency(parseFloat(prod.unitPrice || 0), currencyCode)}</div>
+                                  <div>Total: {formatCurrency(parseFloat(prod.totalValue || 0), currencyCode)}</div>
                                   <div className="col-span-2">Origin: {prod.originCountry || 'N/A'}</div>
                                 </div>
                               </div>
@@ -383,8 +384,8 @@ export function ApprovedShipviewpg({ shipment: initialShipment = {}, onNavigate 
                 <div className="flex justify-between"><span className="text-slate-600">Status:</span><span className="text-slate-900">{currentShipment.status}</span></div>
                 <div className="flex justify-between"><span className="text-slate-600">AI Approval:</span><span className={currentShipment.aiApproval === 'approved' ? 'text-green-600' : 'text-amber-600'}>{currentShipment.aiApproval}</span></div>
                 <div className="flex justify-between"><span className="text-slate-600">Broker Approval:</span><span className={currentShipment.brokerApproval === 'approved' ? 'text-green-600' : 'text-amber-600'}>{currentShipment.brokerApproval}</span></div>
-                <div className="flex justify-between"><span className="text-slate-600">Payment Status:</span><span className={currentShipment.paymentStatus === 'completed' ? 'text-green-600' : 'text-amber-600'}>{currentShipment.paymentStatus || 'N/A'}</span></div>
-                <div className="flex justify-between"><span className="text-slate-600">Total Paid:</span><span className="text-slate-900">{formatCurrency(parseFloat(currentShipment.pricing?.total || 0), currentShipment.currency || currency.code)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-600">Payment Status:</span><span className={currentShipment.status === 'paid' ? 'text-green-600' : 'text-amber-600'}>{currentShipment.status === 'paid' ? 'Completed' : currentShipment.status || 'N/A'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-600">Total Paid:</span><span className="text-slate-900">{formatCurrency(parseFloat(currentShipment.pricingTotal ?? 0), currencyCode)}</span></div>
 
                 <div className="flex justify-between"><span className="text-slate-600">Created:</span><span className="text-slate-900">{currentShipment.createdAt ? new Date(currentShipment.createdAt).toLocaleDateString() : ''}</span></div>
               </div>

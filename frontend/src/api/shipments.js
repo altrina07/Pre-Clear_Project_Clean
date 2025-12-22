@@ -84,3 +84,9 @@ export async function assignBroker(shipmentId) {
   const resp = await http.post(`/shipments/${shipmentId}/assign-broker`);
   return resp.data;
 }
+
+// Delete a shipment
+export async function deleteShipment(shipmentId) {
+  const resp = await http.delete(`/shipments/delete/${shipmentId}`);
+  return resp.data;
+}

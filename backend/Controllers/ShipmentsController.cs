@@ -45,6 +45,13 @@ namespace PreClear.Api.Controllers
                 serviceLevel = s.ServiceLevel,
                 currency = s.Currency,
                 customsValue = s.CustomsValue,
+                pricingTotal = s.PricingTotal,
+                pickupType = s.PickupType,
+                pickupLocation = s.PickupLocation,
+                pickupDate = s.PickupDate,
+                pickupTimeEarliest = s.PickupTimeEarliest,
+                pickupTimeLatest = s.PickupTimeLatest,
+                estimatedDropoffDate = s.EstimatedDropoffDate,
                 status = s.Status,
                 aiApprovalStatus = s.AiApprovalStatus,
                 brokerApprovalStatus = s.BrokerApprovalStatus,
@@ -812,6 +819,48 @@ namespace PreClear.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error retrieving shipment status for {Id}", id);
+                return StatusCode(500, new { error = "internal_error" });
+            }
+        }
+
+        // DELETE /api/shipments/delete/{id} - Delete a shipment
+        [HttpDelete("delete/{id:long}")]
+        [Authorize]
+        public async Task<IActionResult> DeleteShipment(long id)
+        {
+            var currentUserId = GetUserId();
+            var role = GetUserRole();
+            
+            if (!currentUserId.HasValue)
+            {
+                return Unauthorized(new { error = "not_authenticated" });
+            }
+
+            try
+            {
+                // Get shipment to verify ownership
+                var shipment = await _service.GetByIdAsync(id);
+                if (shipment == null)
+                {
+                    return NotFound(new { error = "shipment_not_found" });
+                }
+
+                // Only the creator (shipper) can delete their own shipment
+                if (shipment.CreatedBy != currentUserId.Value)
+                {
+                    return Forbid();
+                }
+
+                var result = await _service.DeleteShipmentAsync(id);
+                if (!result)
+                {
+                    return NotFound(new { error = "shipment_not_found" });
+                }
+                return Ok(new { message = "Shipment deleted successfully" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting shipment {Id}", id);
                 return StatusCode(500, new { error = "internal_error" });
             }
         }

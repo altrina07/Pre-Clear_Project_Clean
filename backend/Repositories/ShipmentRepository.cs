@@ -82,7 +82,8 @@ namespace PreClear.Api.Repositories
                             PreclearToken = s.PreclearToken,
                             Status = s.Status,
                             AssignedBrokerId = s.AssignedBrokerId,
-                            CreatedAt = s.CreatedAt
+                            CreatedAt = s.CreatedAt,
+                            UpdatedAt = s.UpdatedAt
                         };
 
             return await query.ToListAsync();
@@ -132,7 +133,8 @@ namespace PreClear.Api.Repositories
                             PreclearToken = s.PreclearToken,
                             Status = s.Status,
                             AssignedBrokerId = s.AssignedBrokerId,
-                            CreatedAt = s.CreatedAt
+                            CreatedAt = s.CreatedAt,
+                            UpdatedAt = s.UpdatedAt
                         };
 
             return await query.ToListAsync();
@@ -303,6 +305,28 @@ namespace PreClear.Api.Repositories
             // Services are now embedded in shipments table
             // Return null as services are not separate entities anymore
             return null;
+        }
+
+        public async Task<bool> DeleteAsync(long shipmentId)
+        {
+            var shipment = await _db.Shipments.FindAsync(shipmentId);
+            if (shipment == null) return false;
+
+            // Delete related records first due to foreign key constraints
+            var packages = await _db.ShipmentPackages.Where(p => p.ShipmentId == shipmentId).ToListAsync();
+            _db.ShipmentPackages.RemoveRange(packages);
+
+            var products = await _db.ShipmentProducts.Where(p => p.ShipmentId == shipmentId).ToListAsync();
+            _db.ShipmentProducts.RemoveRange(products);
+
+            var parties = await _db.ShipmentParties.Where(p => p.ShipmentId == shipmentId).ToListAsync();
+            _db.ShipmentParties.RemoveRange(parties);
+
+            // Delete the shipment itself
+            _db.Shipments.Remove(shipment);
+            
+            await _db.SaveChangesAsync();
+            return true;
         }
     }
 }

@@ -40,6 +40,8 @@ namespace PreClear.Api.Controllers
                 Id = m.Id,
                 ShipmentId = m.ShipmentId,
                 SenderId = m.SenderId,
+                SenderName = m.Sender?.Name,
+                SenderRole = m.Sender?.Role,
                 Message = m.Message,
                 CreatedAt = m.CreatedAt
             });
@@ -66,6 +68,8 @@ namespace PreClear.Api.Controllers
                 Id = msg.Id,
                 ShipmentId = msg.ShipmentId,
                 SenderId = msg.SenderId,
+                SenderName = msg.Sender?.Name,
+                SenderRole = msg.Sender?.Role,
                 Message = msg.Message,
                 CreatedAt = msg.CreatedAt
             };
@@ -85,6 +89,8 @@ namespace PreClear.Api.Controllers
             public long Id { get; set; }
             public long ShipmentId { get; set; }
             public long? SenderId { get; set; }
+            public string? SenderName { get; set; }
+            public string? SenderRole { get; set; }
             public string Message { get; set; } = string.Empty;
             public System.DateTime CreatedAt { get; set; }
         }

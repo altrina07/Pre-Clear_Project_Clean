@@ -144,6 +144,7 @@ namespace PreClear.Api.Services
                 serviceLevel = s.ServiceLevel,
                 currency = s.Currency,
                 customsValue = s.CustomsValue,
+                pricingTotal = s.PricingTotal,
                 status = s.Status,
                 aiApprovalStatus = s.AiApprovalStatus,
                 brokerApprovalStatus = s.BrokerApprovalStatus,
@@ -332,7 +333,17 @@ namespace PreClear.Api.Services
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
                 ReferenceId = "REF-" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpperInvariant(),
-                Status = dto.Status ?? "draft"
+                Status = dto.Status ?? "draft",
+                ServiceLevel = dto.ServiceLevel,
+                Currency = dto.Currency,
+                CustomsValue = dto.CustomsValue,
+                PricingTotal = dto.PricingTotal,
+                PickupType = dto.PickupType,
+                PickupLocation = dto.PickupLocation,
+                PickupDate = dto.PickupDate,
+                PickupTimeEarliest = dto.PickupTimeEarliest,
+                PickupTimeLatest = dto.PickupTimeLatest,
+                EstimatedDropoffDate = dto.EstimatedDropoffDate
             };
 
             var created = await _repo.AddAsync(shipment);
@@ -351,6 +362,16 @@ namespace PreClear.Api.Services
             s.Mode = dto.Mode;
             s.ShipmentType = dto.ShipmentType;
             s.Status = dto.Status ?? s.Status;
+            s.ServiceLevel = dto.ServiceLevel ?? s.ServiceLevel;
+            s.Currency = dto.Currency ?? s.Currency;
+            s.CustomsValue = dto.CustomsValue ?? s.CustomsValue;
+            s.PricingTotal = dto.PricingTotal ?? s.PricingTotal;
+            s.PickupType = dto.PickupType ?? s.PickupType;
+            s.PickupLocation = dto.PickupLocation ?? s.PickupLocation;
+            s.PickupDate = dto.PickupDate ?? s.PickupDate;
+            s.PickupTimeEarliest = dto.PickupTimeEarliest ?? s.PickupTimeEarliest;
+            s.PickupTimeLatest = dto.PickupTimeLatest ?? s.PickupTimeLatest;
+            s.EstimatedDropoffDate = dto.EstimatedDropoffDate ?? s.EstimatedDropoffDate;
             s.UpdatedAt = DateTime.UtcNow;
             await _repo.UpdateAsync(s);
 
@@ -461,14 +482,16 @@ namespace PreClear.Api.Services
                             items.Add(new ShipmentProduct
                             {
                                 PackageId = currentPackageId,  // Link to the saved package
-                                Name = prod.Name,
-                                Description = prod.Description,
-                                HsCode = prod.HsCode,
+                                Name = prod.Name ?? string.Empty,
+                                Description = prod.Description ?? string.Empty,
+                                Category = prod.Category ?? string.Empty,
+                                HsCode = prod.HsCode ?? string.Empty,
                                 Quantity = prod.Quantity,
                                 Unit = prod.Unit ?? "pcs",
                                 UnitPrice = prod.UnitPrice,
                                 TotalValue = prod.TotalValue,
-                                OriginCountry = prod.OriginCountry
+                                OriginCountry = prod.OriginCountry ?? string.Empty,
+                                ExportReason = prod.ExportReason ?? "Sale"
                             });
                         }
                     }
@@ -483,9 +506,10 @@ namespace PreClear.Api.Services
             var s = await _repo.GetByIdAsync(shipmentId);
             if (s != null)
             {
-                s.ServiceLevel = dto.ServiceLevel;
-                s.Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "USD" : dto.Currency;
-                s.CustomsValue = dto.CustomsValue;
+                s.ServiceLevel = dto.ServiceLevel ?? s.ServiceLevel;
+                s.Currency = string.IsNullOrWhiteSpace(dto.Currency) ? (s.Currency ?? "USD") : dto.Currency;
+                s.CustomsValue = dto.CustomsValue ?? s.CustomsValue;
+                s.PricingTotal = dto.PricingTotal ?? s.PricingTotal;
                 await _repo.UpdateAsync(s);
             }
         }
@@ -625,6 +649,11 @@ namespace PreClear.Api.Services
                 _logger.LogError(ex, "GenerateTokenIfBothApprovalsCompleteAsync: Exception generating token for shipment {ShipmentId}", shipmentId);
                 return (false, null);
             }
+        }
+
+        public async Task<bool> DeleteShipmentAsync(long shipmentId)
+        {
+            return await _repo.DeleteAsync(shipmentId);
         }
     }
 }

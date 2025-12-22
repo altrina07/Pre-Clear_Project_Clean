@@ -23,9 +23,11 @@ namespace PreClear.Api.Services
 
         public async Task<IEnumerable<ShipmentMessage>> GetMessagesForShipmentAsync(long shipmentId)
         {
+            // Include sender for UI display (name/role)
             return await _db.ShipmentMessages
                 .AsNoTracking()
                 .Where(m => m.ShipmentId == shipmentId)
+                .Include(m => m.Sender)
                 .OrderBy(m => m.CreatedAt)
                 .ToListAsync();
         }
@@ -47,6 +49,9 @@ namespace PreClear.Api.Services
 
             _db.ShipmentMessages.Add(msg);
             await _db.SaveChangesAsync();
+
+            // Load sender navigation for downstream DTO mapping
+            await _db.Entry(msg).Reference(m => m.Sender).LoadAsync();
 
             _logger.LogInformation("Saved message {MessageId} for shipment {ShipmentId}", msg.Id, shipmentId);
             return msg;

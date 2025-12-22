@@ -11,6 +11,15 @@ namespace PreClear.Api.Models
         public string? ServiceLevel { get; set; }
         public decimal? CustomsValue { get; set; }
         public string? Currency { get; set; }
+        public decimal? PricingTotal { get; set; }
+
+        // Pickup Information
+        public string? PickupType { get; set; }
+        public string? PickupLocation { get; set; }
+        public DateTime? PickupDate { get; set; }
+        public string? PickupTimeEarliest { get; set; }
+        public string? PickupTimeLatest { get; set; }
+        public DateTime? EstimatedDropoffDate { get; set; }
 
         // Parties
         public PartyDto? Shipper { get; set; }
@@ -64,6 +73,7 @@ namespace PreClear.Api.Models
         public decimal? UnitPrice { get; set; }
         public decimal? TotalValue { get; set; }
         public string? OriginCountry { get; set; }
+        public string? ExportReason { get; set; } = "Sale";
     }
 
     public class ServiceDto

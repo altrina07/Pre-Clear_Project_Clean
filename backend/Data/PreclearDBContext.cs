@@ -106,6 +106,12 @@ namespace PreClear.Api.Data
                 entity.Property(s => s.Mode).HasColumnName("mode").HasMaxLength(50);
                 entity.Property(s => s.ShipmentType).HasColumnName("shipment_type").HasMaxLength(50);
                 entity.Property(s => s.ServiceLevel).HasColumnName("service_level").HasMaxLength(50);
+                entity.Property(s => s.PickupType).HasColumnName("pickup_type").HasMaxLength(50);
+                entity.Property(s => s.PickupLocation).HasColumnName("pickup_location").HasMaxLength(500);
+                entity.Property(s => s.PickupDate).HasColumnName("pickup_date").HasColumnType("datetime(3)");
+                entity.Property(s => s.PickupTimeEarliest).HasColumnName("pickup_time_earliest").HasMaxLength(10);
+                entity.Property(s => s.PickupTimeLatest).HasColumnName("pickup_time_latest").HasMaxLength(10);
+                entity.Property(s => s.EstimatedDropoffDate).HasColumnName("estimated_dropoff_date").HasColumnType("datetime(3)");
                 entity.Property(s => s.Currency).HasColumnName("currency").HasMaxLength(3).HasDefaultValue("USD");
                 entity.Property(s => s.CustomsValue).HasColumnName("customs_value").HasColumnType("decimal(18,2)");
                 entity.Property(s => s.Status).HasColumnName("status").HasMaxLength(50).HasDefaultValue("draft");
