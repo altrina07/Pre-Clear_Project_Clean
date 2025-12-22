@@ -61,6 +61,9 @@ namespace PreClear.Api.Models
 
         [ForeignKey("UploadedBy")]
         public User? Uploader { get; set; }
+
+        [NotMapped]
+        public string? DownloadUrl { get; set; }
     }
 
     public class MarkUploadedRequest

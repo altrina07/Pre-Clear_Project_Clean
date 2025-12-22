@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Amazon.S3;
+using Microsoft.Extensions.Options;
 using PreClear.Api.Data;
 using PreClear.Api.Swagger;
+using PreClear.Api.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -69,8 +72,33 @@ builder.Services.AddScoped<PreClear.Api.Interfaces.IShipmentService, PreClear.Ap
 builder.Services.AddScoped<PreClear.Api.Interfaces.IDocumentRepository, PreClear.Api.Repositories.DocumentRepository>();
 builder.Services.AddScoped<PreClear.Api.Interfaces.IDocumentService, PreClear.Api.Services.DocumentService>();
 builder.Services.AddScoped<PreClear.Api.Interfaces.INotificationService, PreClear.Api.Services.NotificationService>();
+builder.Services.AddScoped<PreClear.Api.Interfaces.IS3StorageService, PreClear.Api.Services.S3StorageService>();
 builder.Services.AddScoped<PreClear.Api.Services.BrokerAssignmentService>(); // Add BrokerAssignmentService
 builder.Services.AddHttpContextAccessor(); // Add IHttpContextAccessor for JWT claims extraction
+
+// AWS S3 Configuration
+// AWS S3 Configuration - prefer user-secrets under "AWSS3" but fall back to "AwsS3Settings"
+builder.Services.Configure<AwsS3Settings>(builder.Configuration.GetSection("AwsS3Settings"));
+builder.Services.AddSingleton<IAmazonS3>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var s3Settings = sp.GetService<IOptions<AwsS3Settings>>()?.Value ?? new AwsS3Settings();
+
+    var accessKey = config["AWSS3:AccessKey"] ?? config["AwsS3Settings:AccessKey"] ?? s3Settings.AccessKey;
+    var secretKey = config["AWSS3:SecretKey"] ?? config["AwsS3Settings:SecretKey"] ?? s3Settings.SecretKey;
+    var region = config["AWSS3:Region"] ?? config["AwsS3Settings:Region"] ?? s3Settings.Region ?? "us-east-1";
+
+    if (string.IsNullOrWhiteSpace(accessKey) || string.IsNullOrWhiteSpace(secretKey))
+    {
+        throw new InvalidOperationException("AWS S3 credentials are not configured. Set them in user secrets (AWSS3:AccessKey / AWSS3:SecretKey) or in configuration (AwsS3Settings).");
+    }
+
+    return new AmazonS3Client(
+        accessKey,
+        secretKey,
+        Amazon.RegionEndpoint.GetBySystemName(region)
+    );
+});
 
 // Connection
 var conn = builder.Configuration.GetConnectionString("DefaultConnection");

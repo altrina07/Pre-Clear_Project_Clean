@@ -67,14 +67,14 @@ export async function brokerApprove(id, decision, notes) {
   return resp.data;
 }
 
-// Upload document for a shipment
+// Upload document for a shipment (S3-backed)
 export async function uploadDocument(id, file, docType) {
   const form = new FormData();
   form.append('file', file);
   form.append('docType', docType);
-  form.append('shipmentId', id);
-  const resp = await http.post(`/shipments/${id}/documents`, form, {
-    headers: { 'Content-Type': undefined } // let browser set boundary
+
+  const resp = await http.post(`/documents/shipments/${id}/upload`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
   });
   return resp.data;
 }
