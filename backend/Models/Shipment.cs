@@ -47,6 +47,28 @@ namespace PreClear.Api.Models
         [MaxLength(50)]
         public string? ServiceLevel { get; set; }
 
+        // Pickup Details
+        [Column("pickup_type")]
+        [MaxLength(50)]
+        public string? PickupType { get; set; }
+
+        [Column("pickup_location")]
+        [MaxLength(500)]
+        public string? PickupLocation { get; set; }
+
+        [Column("pickup_date")]
+        public DateTime? PickupDate { get; set; }
+
+        [Column("pickup_time_earliest")]
+        [MaxLength(10)]
+        public string? PickupTimeEarliest { get; set; }
+
+        [Column("pickup_time_latest")]
+        [MaxLength(10)]
+        public string? PickupTimeLatest { get; set; }
+
+        [Column("estimated_dropoff_date")]
+        public DateTime? EstimatedDropoffDate { get; set; }
 
         // Financial
         [Column("currency")]
@@ -55,6 +77,9 @@ namespace PreClear.Api.Models
 
         [Column("customs_value")]
         public decimal? CustomsValue { get; set; }
+
+        [Column("pricing_total")]
+        public decimal? PricingTotal { get; set; }
 
         // removed: insurance_required
 

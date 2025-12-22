@@ -16,12 +16,52 @@ const formatTimeWithAmPm = (timeString) => {
 
 export function ApprovedShipments({ onNavigate }) {
   const { shipments } = useShipments();
-  const approved = shipments.filter(s => s.brokerApproval === 'approved');
+  const approved = shipments.filter(s => s.status !== 'draft' && s.brokerApproval === 'approved');
   const [expandedShipmentId, setExpandedShipmentId] = useState(null);
   const [viewingDocument, setViewingDocument] = useState(null);
 
   const getCurrency = (originCountry) => {
     return getCurrencyByCountry(originCountry || 'US');
+  };
+
+  const getCurrencyCode = (shipment) => shipment?.currency || getCurrency(shipment?.originCountry).code;
+
+  const getRoute = (shipment) => {
+    const originCity = shipment?.shipper?.city || shipment?.originCountry || 'N/A';
+    const originCountry = shipment?.shipper?.country || shipment?.originCountry || '';
+    const destCity = shipment?.consignee?.city || shipment?.destCountry || 'N/A';
+    const destCountry = shipment?.consignee?.country || shipment?.destCountry || '';
+    return `${originCity}${originCountry ? `, ${originCountry}` : ''} → ${destCity}${destCountry ? `, ${destCountry}` : ''}`;
+  };
+
+  const getPackageCount = (shipment) => shipment?.packages?.length || 0;
+
+  const getProductSummary = (shipment) => {
+    const productCountFromPackages = shipment?.packages?.reduce((sum, pkg) => sum + (pkg?.products?.length || 0), 0) || 0;
+    const explicitProducts = shipment?.products?.length || 0;
+    const count = explicitProducts || productCountFromPackages;
+    const first = shipment?.products?.[0]?.name
+      || shipment?.packages?.[0]?.products?.[0]?.name
+      || shipment?.productName
+      || null;
+    return { count, first };
+  };
+
+  const getTotalWeight = (shipment) => {
+    if (shipment?.totalWeight) return shipment.totalWeight;
+    if (shipment?.weight) return shipment.weight;
+    return shipment?.packages?.reduce((sum, pkg) => sum + (parseFloat(pkg?.weight) || 0), 0) || 0;
+  };
+
+  const getTotalQuantity = (shipment) => {
+    if (shipment?.totalQuantity) return shipment.totalQuantity;
+    if (shipment?.quantity) return shipment.quantity;
+    return shipment?.packages?.reduce((sum, pkg) => {
+      if (Array.isArray(pkg?.products)) {
+        return sum + pkg.products.reduce((inner, prod) => inner + (parseFloat(prod?.qty) || 0), 0);
+      }
+      return sum;
+    }, 0) || 0;
   };
 
   return (
@@ -47,13 +87,12 @@ export function ApprovedShipments({ onNavigate }) {
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-slate-900 text-xl">Shipment {s.id}</h3>
+                      <h3 className="text-slate-900 text-xl">Shipment {s.referenceId || s.id}</h3>
                       <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm flex items-center gap-1">
                         <CheckCircle className="w-3 h-3" />
                         Approved
                       </span>
                     </div>
-                    <p className="text-slate-600 text-sm">Submitted: {s.date}</p>
                   </div>
                   <button
                     onClick={() => onNavigate('approved-shipview', s)}
@@ -67,12 +106,12 @@ export function ApprovedShipments({ onNavigate }) {
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <p className="text-slate-500 text-sm mb-1">Product</p>
-                    <p className="text-slate-900">{s.productName}</p>
+                    <p className="text-slate-500 text-sm mb-1">Title</p>
+                    <p className="text-slate-900">{s.title || 'N/A'}</p>
                   </div>
                     <div>
                       <p className="text-slate-500 text-sm mb-1">Route</p>
-                      <p className="text-slate-900">{s.shipper?.city || s.originCountry || 'N/A'}, {s.shipper?.country || ''} → {s.consignee?.city || s.destCountry || 'N/A'}, {s.consignee?.country || ''}</p>
+                      <p className="text-slate-900">{getRoute(s)}</p>
                     </div>
                    <div>
                      <p className="text-slate-500 text-sm mb-1">Assigned Broker</p>
@@ -80,15 +119,19 @@ export function ApprovedShipments({ onNavigate }) {
                    </div>
                    <div>
                      <p className="text-slate-500 text-sm mb-1">Quantity</p>
-                     <p className="text-slate-900">{s.quantity} units</p>
+                     <p className="text-slate-900">{getTotalQuantity(s)} units</p>
                    </div>
                    <div>
                      <p className="text-slate-500 text-sm mb-1">Weight</p>
-                     <p className="text-slate-900">{s.weight} kg</p>
+                     <p className="text-slate-900">{getTotalWeight(s)} kg</p>
                    </div>
                    <div>
                      <p className="text-slate-500 text-sm mb-1">Product Value</p>
-                     <p className="text-slate-900">{formatCurrency(parseFloat(s.value || 0), s.currency || currency.code)}</p>
+                     <p className="text-slate-900">{formatCurrency(parseFloat(s.value ?? s.customsValue ?? 0), getCurrencyCode(s))}</p>
+                   </div>
+                   <div>
+                     <p className="text-slate-500 text-sm mb-1">Packages</p>
+                     <p className="text-slate-900">{getPackageCount(s)} total</p>
                    </div>
                 </div>
               </div>

@@ -113,7 +113,7 @@ export function PaymentPage({ shipment, onNavigate }) {
   const pickupCharge = parseFloat(pricing.pickupCharge || calculatedPickupCharge);
   const subtotal = parseFloat(pricing.subtotal || (basePrice + serviceCharge + customsClearance + pickupCharge) || 0);
   const tax = parseFloat(pricing.tax || subtotal * 0.18 || 0);
-  const total = parseFloat(pricing.total || subtotal + tax || 0);
+  const total = parseFloat(shipment?.pricingTotal || pricing.total || subtotal + tax || 0);
 
   const handlePayment = () => {
     setShowCardModal(true);

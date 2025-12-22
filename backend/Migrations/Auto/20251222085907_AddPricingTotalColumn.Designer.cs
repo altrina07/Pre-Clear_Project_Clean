@@ -2,17 +2,20 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PreClear.Api.Data;
 
 #nullable disable
 
-namespace backend.Migrations
+namespace backend.Migrations.Auto
 {
     [DbContext(typeof(PreclearDbContext))]
-    partial class PreclearDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251222085907_AddPricingTotalColumn")]
+    partial class AddPricingTotalColumn
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -127,63 +130,6 @@ namespace backend.Migrations
                         .HasDatabaseName("idx_brokerreviews_shipment");
 
                     b.ToTable("broker_reviews", (string)null);
-                });
-
-            modelBuilder.Entity("PreClear.Api.Models.DocumentRequest", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime(3)")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP(3)");
-
-                    b.Property<DateTime?>("FulfilledAt")
-                        .HasColumnType("datetime(3)")
-                        .HasColumnName("fulfilled_at");
-
-                    b.Property<string>("RequestMessage")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("request_message");
-
-                    b.Property<long>("RequestedByBrokerId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("requested_by_broker_id");
-
-                    b.Property<string>("RequestedDocumentNames")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("requested_document_names");
-
-                    b.Property<long>("ShipmentId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("shipment_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)")
-                        .HasDefaultValue("pending")
-                        .HasColumnName("status");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RequestedByBrokerId")
-                        .HasDatabaseName("idx_docreq_broker");
-
-                    b.HasIndex("ShipmentId")
-                        .HasDatabaseName("idx_docreq_shipment");
-
-                    b.HasIndex("Status")
-                        .HasDatabaseName("idx_docreq_status");
-
-                    b.ToTable("document_requests", (string)null);
                 });
 
             modelBuilder.Entity("PreClear.Api.Models.Notification", b =>
@@ -996,17 +942,6 @@ namespace backend.Migrations
                         .IsRequired();
 
                     b.Navigation("Broker");
-
-                    b.Navigation("Shipment");
-                });
-
-            modelBuilder.Entity("PreClear.Api.Models.DocumentRequest", b =>
-                {
-                    b.HasOne("PreClear.Api.Models.Shipment", "Shipment")
-                        .WithMany()
-                        .HasForeignKey("ShipmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
 
                     b.Navigation("Shipment");
                 });

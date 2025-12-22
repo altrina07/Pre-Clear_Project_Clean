@@ -22,6 +22,7 @@ namespace PreClear.Api.Interfaces
         Task<List<ShipmentPackage>> GetPackagesAsync(long shipmentId);
         Task<List<ShipmentProduct>> GetItemsAsync(long shipmentId);
         Task<ShipmentServiceData?> GetServicesAsync(long shipmentId);
+        Task<bool> DeleteAsync(long shipmentId);
     }
 
     public class ShipmentServiceData

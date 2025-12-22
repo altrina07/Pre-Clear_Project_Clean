@@ -90,7 +90,7 @@ export function ShipmentBooking({ onNavigate }) {
                     </div>
                     <div className="flex-1">
                       <h3 className="text-slate-900 font-semibold mb-1">{shipment.title || shipment.productName || 'Shipment'}</h3>
-                      <p className="text-slate-600 text-sm mb-2">ID: {shipment.id}</p>
+                      <p className="text-slate-600 text-sm mb-2">Reference: {shipment.referenceId || `#${shipment.id}`}</p>
                       <div className="flex items-center gap-2 mb-3">
                         <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
@@ -146,7 +146,7 @@ export function ShipmentBooking({ onNavigate }) {
                 {/* Middle: Token Info */}
                 <div className="lg:col-span-3 border-l border-slate-100 lg:pl-6">
                   <p className="text-slate-500 text-sm mb-1">Pre-Clear Token</p>
-                  <p className="text-slate-900 font-mono text-sm mb-3">{shipment.token || shipment.preclearToken || shipment.PreclearToken}</p>
+                  <p className="text-slate-900 font-mono text-sm mb-3">{shipment.token || shipment.preclearToken || shipment.PreclearToken || 'N/A'}</p>
                   
                       </div>
 

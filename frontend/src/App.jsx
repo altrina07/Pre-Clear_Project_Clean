@@ -70,6 +70,11 @@ function AppShell() {
     setUserRole(role);
     setIsLoggedIn(true);
     setCurrentPage("dashboard");
+    setCurrentShipment(null);
+    // Always land on dashboard route after login (clear deep links)
+    try {
+      navigate("/", { replace: true });
+    } catch {}
     
     // Fetch user profile information
     try {

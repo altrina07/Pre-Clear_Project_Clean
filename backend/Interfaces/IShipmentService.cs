@@ -16,5 +16,6 @@ namespace PreClear.Api.Interfaces
         System.Threading.Tasks.Task<bool> UpdateStatusAsync(long shipmentId, string status);
         System.Threading.Tasks.Task<bool> PersistAiPredictedDocumentsAsync(long shipmentId, string[] predictedDocuments);
         System.Threading.Tasks.Task<(bool success, string? token)> GenerateTokenIfBothApprovalsCompleteAsync(long shipmentId);
+        System.Threading.Tasks.Task<bool> DeleteShipmentAsync(long shipmentId);
     }
 }

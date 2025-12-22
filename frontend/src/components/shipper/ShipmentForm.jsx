@@ -892,8 +892,17 @@ export function ShipmentForm({ shipment, onNavigate }) {
       ServiceLevel: formData.serviceLevel || 'Standard',
       CustomsValue: calculatedCustomsValue,
       Currency: formData.currency || 'USD',
+      PricingTotal: pricing.total || 0,
       BillTo: formData.billTo || 'Shipper',
       Status: 'draft',
+      
+      // Pickup information
+      PickupType: formData.pickupType || null,
+      PickupLocation: formData.pickupLocation || null,
+      PickupDate: formData.pickupDate || null,
+      PickupTimeEarliest: formData.pickupTimeEarliest || null,
+      PickupTimeLatest: formData.pickupTimeLatest || null,
+      EstimatedDropoffDate: formData.estimatedDropoffDate || null,
       
       // Shipper info (PartyType = shipper)
       Shipper: {
@@ -945,11 +954,17 @@ export function ShipmentForm({ shipment, onNavigate }) {
           Description: prod.description || '',
           Category: prod.category || '',
           HsCode: prod.hsCode || '',
-          Quantity: parseInt(prod.quantity) || 1,
+          Quantity: (Number.isFinite(parseFloat(prod.qty)) ? parseFloat(prod.qty) : (parseFloat(prod.quantity) || 0)) || 0,
           Unit: prod.uom || 'pcs',
-          UnitPrice: parseFloat(prod.unitValue) || 0,
-          TotalValue: parseFloat(prod.totalValue) || 0,
-          OriginCountry: prod.originCountry || formData.shipper?.country || ''
+          UnitPrice: (Number.isFinite(parseFloat(prod.unitPrice)) ? parseFloat(prod.unitPrice) : (parseFloat(prod.unitValue) || 0)) || 0,
+          TotalValue: (() => {
+            const qty = (Number.isFinite(parseFloat(prod.qty)) ? parseFloat(prod.qty) : (parseFloat(prod.quantity) || 0)) || 0;
+            const unitPrice = (Number.isFinite(parseFloat(prod.unitPrice)) ? parseFloat(prod.unitPrice) : (parseFloat(prod.unitValue) || 0)) || 0;
+            const providedTotal = parseFloat(prod.totalValue);
+            return Number.isFinite(providedTotal) ? providedTotal : qty * unitPrice;
+          })(),
+          OriginCountry: prod.originCountry || formData.shipper?.country || '',
+          ExportReason: prod.reasonForExport || prod.exportReason || 'Sale'
         }))
       })),
       
@@ -2062,7 +2077,7 @@ export function ShipmentForm({ shipment, onNavigate }) {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-600">Total Weight:</span>
-                    <span className="text-slate-900">{formData.totalWeight || '—'} kg</span>
+                    <span className="text-slate-900">{formData.weight} kg</span>
                   </div>
                 </div>
               </div>

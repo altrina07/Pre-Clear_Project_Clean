@@ -167,9 +167,9 @@ namespace PreClear.Api.Controllers
             // selective updates (avoid overwriting password_hash unless provided)
             user.FirstName = input.FirstName;
             user.LastName = input.LastName;
-            user.Email = input.Email; // Update email
-            user.Phone = input.Phone;
-            user.Company = input.Company;
+            user.Email = input.Email ?? user.Email; // Preserve existing if null
+            user.Phone = input.Phone ?? user.Phone;
+            user.Company = input.Company ?? user.Company;
             
             // Only admins can change role
             if (isAdmin && !string.IsNullOrWhiteSpace(input.Role))

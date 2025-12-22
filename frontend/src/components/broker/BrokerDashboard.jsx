@@ -19,23 +19,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 export function BrokerDashboard({ onNavigate }) {
   const { shipments = [] } = useShipments();
 
-  // Filter out completed shipments (paid, broker-approved, or token-generated)
+  // Filter out completed shipments (paid, broker-approved, or token-generated) and draft shipments for the working table
   const activeShipments = shipments.filter(s => 
     s.status !== 'paid' && 
     s.status !== 'token-generated' && 
+    s.status !== 'draft' &&
     s.brokerApproval !== 'approved'
   );
 
-  // Derived groups (still available if you want to show counts) - use activeShipments
-  const pendingShipments = activeShipments.filter(s =>
+  // Counts use the full dataset for accuracy (excluding drafts)
+  const nonDraftShipments = shipments.filter(s => s.status !== 'draft');
+  const pendingShipments = nonDraftShipments.filter(s =>
     s.aiApproval === 'approved' &&
     (s.brokerApproval === 'pending' || s.brokerApproval === 'not-started')
   );
-  const newShipments = activeShipments.filter(s =>
+  const newShipments = nonDraftShipments.filter(s =>
     s.status === 'documents-uploaded' || s.status === 'awaiting-ai'
   );
-  const documentsRequested = activeShipments.filter(s => s.status === 'document-requested');
-  const documentsResubmitted = activeShipments.filter(s =>
+  const documentsRequested = nonDraftShipments.filter(s => s.status === 'document-requested' || s.brokerApproval === 'documents-requested');
+  const documentsResubmitted = nonDraftShipments.filter(s =>
     s.status === 'awaiting-broker' && s.brokerApproval === 'documents-requested'
   );
 
@@ -45,10 +47,11 @@ export function BrokerDashboard({ onNavigate }) {
 
   // Notifications removed from dashboard header per user request
 
-  const approvedToday = activeShipments.filter(s =>
+  const todayStr = new Date().toDateString();
+  const approvedToday = (shipments || []).filter(s =>
     s.brokerApproval === 'approved' &&
-    s.brokerReviewedAt &&
-    new Date(s.brokerReviewedAt).toDateString() === new Date().toDateString()
+    s.updatedAt &&
+    new Date(s.updatedAt).toDateString() === todayStr
   ).length;
 
   const handleOpenChat = (shipmentId) => {
@@ -87,7 +90,7 @@ export function BrokerDashboard({ onNavigate }) {
         <Table>
           <TableHeader>
             <TableRow style={{ background: '#D4AFA0' }}>
-              <TableHead style={{ width: '10%', color: '#2F1B17', fontWeight: '600' }}>Shipment ID</TableHead>
+              <TableHead style={{ width: '12%', color: '#2F1B17', fontWeight: '600' }}>Reference ID</TableHead>
               <TableHead style={{ width: '12%', color: '#2F1B17', fontWeight: '600' }}>Title</TableHead>
               <TableHead style={{ width: '14%', color: '#2F1B17', fontWeight: '600' }}>Route</TableHead>
               <TableHead style={{ width: '12%', color: '#2F1B17', fontWeight: '600' }}>Shipper</TableHead>
@@ -115,7 +118,7 @@ export function BrokerDashboard({ onNavigate }) {
 
               return (
                 <TableRow key={shipment.id} className="hover:bg-slate-50">
-                  <TableCell><span className="text-slate-900">#{shipment.id}</span></TableCell>
+                  <TableCell><span className="text-slate-900">{shipment.referenceId || `#${shipment.id}`}</span></TableCell>
                   <TableCell><span className="text-slate-900">{shipment.title || shipment.productName}</span></TableCell>
                   <TableCell><span className="text-slate-900 text-sm">{shipment.shipper?.city || shipment.shipperName || 'N/A'}, {shipment.shipper?.country || ''} → {shipment.consignee?.city || 'N/A'}, {shipment.consignee?.country || ''}</span></TableCell>
                   <TableCell><span className="text-slate-900">{shipment.shipper?.company || shipment.shipperName || 'N/A'}</span></TableCell>

@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useShipments } from '../../hooks/useShipments';
 import { getShipmentById } from '../../api/shipments';
-import { getCurrencyByCountry } from '../../utils/validation';
+import { getCurrencyByCountry, formatCurrency } from '../../utils/validation';
 import { ShipmentChatPanel } from '../ShipmentChatPanel';
 import { shipmentsStore } from '../../store/shipmentsStore';
 import ShipmentDocumentsPanel from '../shipper/ShipmentDocumentsPanel';
@@ -45,8 +45,10 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
   const [viewingDocument, setViewingDocument] = useState(null);
   const [showAllDocs, setShowAllDocs] = useState(false);
 
-  // Keep currency derived from origin country (fallback to US)
-  const currency = getCurrencyByCountry(currentShipment?.originCountry || 'US');
+  // Use shipper's currency if provided, otherwise derive from origin country (fallback to US)
+  const currency = currentShipment?.currency 
+    ? { code: currentShipment.currency, symbol: getCurrencyByCountry(currentShipment.originCountry || 'US').symbol }
+    : getCurrencyByCountry(currentShipment?.originCountry || 'US');
 
   // Subscribe to store updates and merge status-like fields only to avoid losing full details
   useEffect(() => {
@@ -216,6 +218,8 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
                   <p className="text-slate-500 text-sm mb-1">Currency</p>
                   <p className="text-slate-900">{currentShipment.currency || currency.code}</p>
                 </div>
+                
+               
 
                 <div>
                   <p className="text-slate-500 text-sm mb-1">Pickup</p>
@@ -357,15 +361,15 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
                                   </div>
                                   <div>
                                     <p className="text-slate-500 text-xs mb-1">Quantity</p>
-                                    <p className="text-slate-900 text-sm">{product.qty || 'N/A'}</p>
+                                    <p className="text-slate-900 text-sm">{product.qty || product.quantity || 'N/A'}</p>
                                   </div>
                                   <div>
                                     <p className="text-slate-500 text-xs mb-1">Unit Price</p>
-                                    <p className="text-slate-900 text-sm">{product.unitPrice || 'N/A'}</p>
+                                    <p className="text-slate-900 text-sm">{formatCurrency(parseFloat(product.unitPrice || product.unit_price || 0), currency.code)}</p>
                                   </div>
                                   <div className="col-span-2">
                                     <p className="text-slate-500 text-xs mb-1">Total Value</p>
-                                    <p className="text-slate-900 text-sm">{currency.symbol}{product.totalValue || 0} {currency.code}</p>
+                                    <p className="text-slate-900 text-sm">{formatCurrency(product.totalValue || 0, currency.code)}</p>
                                   </div>
                                   <div className="col-span-2">
                                     <p className="text-slate-500 text-xs mb-1">Description</p>

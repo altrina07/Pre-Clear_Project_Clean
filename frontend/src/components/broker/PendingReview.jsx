@@ -16,7 +16,7 @@ import {
 import { shipmentsStore } from '../../store/shipmentsStore';
 import { useShipments } from '../../hooks/useShipments';
 import { ShipmentChatPanel } from '../ShipmentChatPanel';
-import { getCurrencyByCountry } from '../../utils/validation';
+import { getCurrencyByCountry, formatCurrency } from '../../utils/validation';
 
 // Helper function to format time to 12-hour format with AM/PM
 const formatTimeWithAmPm = (timeString) => {
@@ -40,12 +40,13 @@ export function PendingReview({ onNavigate }) {
   const [requestedDocNames, setRequestedDocNames] = useState([]);
   const [viewingDocument, setViewingDocument] = useState(null);
 
-  // Load pending shipments from the store subscription
+  // Load pending shipments from the store subscription (excluding drafts)
   useEffect(() => {
     const pending = shipments.filter(s => 
-      s.brokerApproval === 'pending' || 
+      s.status !== 'draft' &&
+      (s.brokerApproval === 'pending' || 
       s.brokerApproval === 'documents-requested' ||
-      s.status === 'awaiting-broker'
+      s.status === 'awaiting-broker')
     );
     setPendingShipments(pending);
     
@@ -60,6 +61,34 @@ export function PendingReview({ onNavigate }) {
   // Helper function to get currency based on origin country
   const getCurrency = (originCountry) => {
     return getCurrencyByCountry(originCountry || 'US');
+  };
+
+  const getCurrencyCode = (shipment) => shipment?.currency || getCurrency(shipment?.originCountry).code;
+
+  const getRoute = (shipment) => {
+    const originCity = shipment?.shipper?.city || shipment?.originCountry || 'N/A';
+    const originCountry = shipment?.shipper?.country || shipment?.originCountry || '';
+    const destCity = shipment?.consignee?.city || shipment?.destCountry || 'N/A';
+    const destCountry = shipment?.consignee?.country || shipment?.destCountry || '';
+    return `${originCity}${originCountry ? `, ${originCountry}` : ''} → ${destCity}${destCountry ? `, ${destCountry}` : ''}`;
+  };
+
+  const getProductSummary = (shipment) => {
+    const productCountFromPackages = shipment?.packages?.reduce((sum, pkg) => sum + (pkg?.products?.length || 0), 0) || 0;
+    const explicitProducts = shipment?.products?.length || 0;
+    const count = explicitProducts || productCountFromPackages;
+    const first = shipment?.products?.[0]?.name
+      || shipment?.packages?.[0]?.products?.[0]?.name
+      || null;
+    return { count, first };
+  };
+
+  const getPackageCount = (shipment) => shipment?.packages?.length || 0;
+
+  const getTotalWeight = (shipment) => {
+    if (shipment?.totalWeight) return shipment.totalWeight;
+    if (shipment?.weight) return shipment.weight;
+    return shipment?.packages?.reduce((sum, pkg) => sum + (parseFloat(pkg?.weight) || 0), 0) || 0;
   };
 
   const handleApprove = (shipmentId) => {
@@ -120,48 +149,7 @@ export function PendingReview({ onNavigate }) {
         <p className="text-slate-600">Review and approve shipment documentation</p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <Clock className="w-6 h-6 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-slate-600 text-sm">Pending Review</p>
-              <p className="text-slate-900 text-2xl">
-                {pendingShipments.filter(s => s.brokerApproval === 'pending').length}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-slate-600 text-sm">Docs Requested</p>
-              <p className="text-slate-900 text-2xl">
-                {pendingShipments.filter(s => s.brokerApproval === 'documents-requested').length}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-green-600" />
-            </div>
-            <div>
-              <p className="text-slate-600 text-sm">Total This Week</p>
-              <p className="text-slate-900 text-2xl">{pendingShipments.length}</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      
 
       {/* Shipments List */}
       {pendingShipments.length === 0 ? (
@@ -181,7 +169,7 @@ export function PendingReview({ onNavigate }) {
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-slate-900 text-xl">Shipment {shipment.id}</h3>
+                      <h3 className="text-slate-900 text-xl">Shipment {shipment.referenceId || shipment.id}</h3>
                       {shipment.brokerApproval === 'pending' && (
                         <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm flex items-center gap-1">
                           <Clock className="w-3 h-3" />
@@ -195,7 +183,6 @@ export function PendingReview({ onNavigate }) {
                         </span>
                       )}
                     </div>
-                    <p className="text-slate-600 text-sm">Submitted: {shipment.date}</p>
                   </div>
                   <button
                     onClick={() => setSelectedShipment(selectedShipment?.id === shipment.id ? null : shipment)}
@@ -208,10 +195,10 @@ export function PendingReview({ onNavigate }) {
                 </div>
 
                 {/* Quick Info */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                   <div>
-                    <p className="text-slate-500 text-sm mb-1">Shipment ID</p>
-                    <p className="text-slate-900 font-mono text-sm">{shipment.id}</p>
+                    <p className="text-slate-500 text-sm mb-1">Reference ID</p>
+                    <p className="text-slate-900 font-mono text-sm">{shipment.referenceId || shipment.id}</p>
                   </div>
                   <div>
                     <p className="text-slate-500 text-sm mb-1">Title</p>
@@ -219,7 +206,7 @@ export function PendingReview({ onNavigate }) {
                   </div>
                   <div>
                     <p className="text-slate-500 text-sm mb-1">Route</p>
-                    <p className="text-slate-900">{shipment.shipper?.city || shipment.originCountry}, {shipment.shipper?.country || shipment.originCountry} → {shipment.consignee?.city || shipment.destCountry}, {shipment.consignee?.country || shipment.destCountry}</p>
+                    <p className="text-slate-900">{getRoute(shipment)}</p>
                   </div>
                   <div>
                     <p className="text-slate-500 text-sm mb-1">Shipper Company</p>
@@ -227,7 +214,21 @@ export function PendingReview({ onNavigate }) {
                   </div>
                   <div>
                     <p className="text-slate-500 text-sm mb-1">Value</p>
-                    <p className="text-slate-900">{getCurrency(shipment.originCountry).symbol}{shipment.customsValue || 0} {getCurrency(shipment.originCountry).code}</p>
+                    <p className="text-slate-900">{formatCurrency(shipment.value ?? shipment.customsValue ?? 0, getCurrencyCode(shipment))}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 text-sm mb-1">Products</p>
+                    <p className="text-slate-900">
+                      {(() => {
+                        const { count, first } = getProductSummary(shipment);
+                        if (!count) return 'N/A';
+                        return first ? `${first} (+${Math.max(count - 1, 0)} more)` : `${count} items`;
+                      })()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 text-sm mb-1">Packages / Weight</p>
+                    <p className="text-slate-900">{getPackageCount(shipment)} pkgs · {getTotalWeight(shipment)} kg</p>
                   </div>
                   <div>
                     <p className="text-slate-500 text-sm mb-1">AI Status</p>
@@ -392,7 +393,7 @@ export function PendingReview({ onNavigate }) {
                                         </div>
                                         <div>
                                           <span className="text-slate-500">Unit Price:</span>
-                                          <p className="text-slate-900">{product.unitPrice || 'N/A'}</p>
+                                          <p className="text-slate-900">{formatCurrency(parseFloat(product.unitPrice || 0), getCurrencyCode(shipment))}</p>
                                         </div>
                                         <div className="col-span-2">
                                           <span className="text-slate-500">Total Value:</span>

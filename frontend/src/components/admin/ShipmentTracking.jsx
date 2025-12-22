@@ -104,7 +104,8 @@ export function ShipmentTracking() {
                         <Package className="w-5 h-5" style={{ color: '#2F1B17' }} />
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900">Shipment #{shipment.id}</p>
+                        <p className="font-semibold text-slate-900">Ref: {shipment.referenceId || `#${shipment.id}`}</p>
+                        <p className="text-sm text-slate-700">{shipment.title || 'Untitled Shipment'}</p>
                         <p className="text-sm text-slate-600">
                           {shipment.shipper?.city || 'N/A'}, {shipment.shipper?.country || ''} → {shipment.consignee?.city || 'N/A'}, {shipment.consignee?.country || ''}
                         </p>
@@ -211,6 +212,10 @@ export function ShipmentTracking() {
                       <div>
                         <h3 className="font-semibold text-slate-900 mb-4" style={{ color: '#2F1B17' }}>Shipment Details</h3>
                         <div className="space-y-3 bg-slate-50 p-4 rounded-lg">
+                          <div>
+                            <p className="text-xs text-slate-600 uppercase tracking-wide">Reference ID</p>
+                            <p className="text-slate-900 font-mono">{shipment.referenceId || `#${shipment.id}`}</p>
+                          </div>
                           <div>
                             <p className="text-xs text-slate-600 uppercase tracking-wide">Shipment ID</p>
                             <p className="text-slate-900 font-mono">#{shipment.id}</p>

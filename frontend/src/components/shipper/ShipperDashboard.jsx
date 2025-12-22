@@ -1,4 +1,6 @@
 import { PackagePlus, Package, Clock, CheckCircle, XCircle, AlertTriangle, TrendingUp, Upload, DollarSign, Eye, Edit, Filter, MessageSquare } from 'lucide-react';
+import { ShipmentChatPanel } from '../ShipmentChatPanel';
+import { NotificationPanel } from '../NotificationPanel';
 import { shipmentsStore, createDefaultShipment } from '../../store/shipmentsStore';
 import { useState } from 'react';
 import { useShipments } from '../../hooks/useShipments';
@@ -10,6 +12,8 @@ export function ShipperDashboard({ onNavigate }) {
   const { shipments: allShipments } = useShipments();
   const [filterStatus, setFilterStatus] = useState('all');
   const [viewingDocuments, setViewingDocuments] = useState(null);
+  const [selectedShipmentForChat, setSelectedShipmentForChat] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
   
   // Exclude paid shipments from all categories
   const activeShipments = allShipments.filter(s => 
@@ -296,8 +300,16 @@ export function ShipperDashboard({ onNavigate }) {
                     <td className="p-4 text-slate-600 text-sm">{new Date(shipment.createdAt).toLocaleDateString()}</td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        
                         {getActionButton(shipment)}
+                        <button
+                          onClick={() => { setSelectedShipmentForChat(shipment.id); setChatOpen(true); }}
+                          disabled={!shipment.assignedBrokerId}
+                          className="px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 disabled:opacity-60"
+                          style={{ background: '#FFF4DC', color: '#2F1B17', border: '2px solid #E6B800' }}
+                          title={shipment.assignedBrokerId ? 'Open chat' : 'Chat available after broker assignment'}
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -460,6 +472,17 @@ export function ShipperDashboard({ onNavigate }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Chat Panel */}
+      {selectedShipmentForChat && (
+        <ShipmentChatPanel
+          shipmentId={selectedShipmentForChat}
+          isOpen={chatOpen}
+          onClose={() => { setChatOpen(false); setSelectedShipmentForChat(null); }}
+          userRole="shipper"
+          userName="Shipper"
+        />
       )}
     </div>
   );

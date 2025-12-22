@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Send, Paperclip, MessageCircle } from 'lucide-react';
-import { listShipmentMessages, sendShipmentMessage } from '../api/chat';
+import { shipmentsStore } from '../store/shipmentsStore';
+import { useShipments } from '../hooks/useShipments';
 
 const COLORS = {
   cream: '#FBF9F6',
@@ -14,15 +15,22 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
   const [newMessage, setNewMessage] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [chatViewingFile, setChatViewingFile] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const { loadShipmentMessages, sendShipmentMessage } = useShipments();
 
   useEffect(() => {
-    if (isOpen && shipmentId) {
-      loadMessages();
-    }
+    if (!isOpen || !shipmentId) return undefined;
+
+    // Fetch once when opened
+    loadMessages();
+
+    // Keep in sync with store changes without re-fetching
+    const syncFromStore = () => setMessages(shipmentsStore.getMessages(shipmentId));
+    const unsubscribe = shipmentsStore.subscribe(syncFromStore);
+    return unsubscribe;
   }, [isOpen, shipmentId]);
 
   useEffect(() => {
@@ -31,16 +39,15 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
 
   const loadMessages = async () => {
     if (!shipmentId) return;
-    setLoading(true);
+    setIsLoading(true);
     setError(null);
     try {
-      const data = await listShipmentMessages(shipmentId);
-      setMessages(Array.isArray(data) ? data : []);
+      await loadShipmentMessages(shipmentId);
     } catch (err) {
-      setError(err?.message || 'Failed to load messages');
-      setMessages([]);
+      setError(err?.message || 'Unable to load messages');
     } finally {
-      setLoading(false);
+      setMessages(shipmentsStore.getMessages(shipmentId));
+      setIsLoading(false);
     }
   };
 
@@ -72,30 +79,18 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
     }, 900);
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!newMessage.trim()) return;
-
-    const optimistic = {
-      id: `tmp-${Date.now()}`,
-      shipmentId,
-      sender: userRole,
-      senderName: userName,
-      message: newMessage,
-      timestamp: new Date().toISOString(),
-      type: 'message'
-    };
-    setMessages(prev => [...prev, optimistic]);
-
-    sendShipmentMessage(shipmentId, newMessage)
-      .then(saved => {
-        setMessages(prev => prev.map(m => m.id === optimistic.id ? saved : m));
-      })
-      .catch(err => {
-        setError(err?.message || 'Failed to send message');
-        setMessages(prev => prev.filter(m => m.id !== optimistic.id));
-      });
-
-    setNewMessage('');
+    setIsLoading(true);
+    setError(null);
+    try {
+      await sendShipmentMessage(shipmentId, newMessage, userName);
+      setNewMessage('');
+    } catch (err) {
+      setError(err?.message || 'Unable to send message');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -126,8 +121,10 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        {loading && <p className="text-slate-500 text-sm">Loading messages…</p>}
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        {isLoading && messages.length === 0 && (
+          <p className="text-xs text-slate-500">Loading messages...</p>
+        )}
         {messages.map(msg => {
           const messageId = msg.id || msg.Id;
           const own = msg.sender === userRole || msg.senderName === userName || msg.SenderName === userName;
@@ -197,7 +194,7 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
 
           <button
             onClick={handleSendMessage}
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() || isLoading}
             className="w-10 h-10 flex items-center justify-center rounded-lg text-white"
             style={{ background: COLORS.coffeeLight }}
           >

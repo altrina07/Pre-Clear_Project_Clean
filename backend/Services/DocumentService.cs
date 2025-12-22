@@ -57,15 +57,37 @@ namespace PreClear.Api.Services
             var docFolder = SlugifyDocType(docType);
             var folder = $"shippers/{shipment.CreatedBy}/shipments/{shipmentId}/{docFolder}";
 
-            // Upload to S3 and store returned key
-            var s3Key = await _storage.UploadFileAsync(file, folder);
+            string storedPath;
+
+            try
+            {
+                // Primary path: upload to S3
+                storedPath = await _storage.UploadFileAsync(file, folder);
+            }
+            catch (Exception ex)
+            {
+                // Fallback path: persist to local disk so uploads still work in dev/offline
+                _logger.LogError(ex, "S3 upload failed, falling back to local storage for shipment {ShipmentId}", shipmentId);
+
+                var localRoot = Path.Combine(Path.GetTempPath(), "preclear-docs", shipmentId.ToString());
+                Directory.CreateDirectory(localRoot);
+                var localName = $"{Guid.NewGuid()}{ext}";
+                var localPath = Path.Combine(localRoot, localName);
+                using (var fs = File.Create(localPath))
+                {
+                    await file.CopyToAsync(fs);
+                }
+
+                // Prefix with local: so downloader knows to read from disk
+                storedPath = $"local:{localPath}";
+            }
 
             var doc = new ShipmentDocument
             {
                 ShipmentId = shipmentId,
                 DocumentType = docType,
                 FileName = Path.GetFileName(originalFileName),
-                FilePath = s3Key,
+                FilePath = storedPath,
                 FileSize = file.Length,
                 MimeType = file.ContentType,
                 UploadedBy = uploadedBy,
@@ -76,7 +98,7 @@ namespace PreClear.Api.Services
             var created = await _repo.AddAsync(doc);
             created.DownloadUrl = BuildDownloadUrlPlaceholder(created.Id);
 
-            _logger.LogInformation("Uploaded document {DocId} for shipment {ShipmentId} to S3 key {Key}", created.Id, shipmentId, s3Key);
+            _logger.LogInformation("Uploaded document {DocId} for shipment {ShipmentId} to storage path {Path}", created.Id, shipmentId, storedPath);
             return created;
         }
 
@@ -99,6 +121,26 @@ namespace PreClear.Api.Services
             if (string.IsNullOrWhiteSpace(doc.FilePath))
             {
                 return (doc, null, null, null);
+            }
+
+            // Detect local fallback path
+            if (doc.FilePath.StartsWith("local:", StringComparison.OrdinalIgnoreCase))
+            {
+                var localPath = doc.FilePath.Substring("local:".Length);
+                if (!File.Exists(localPath))
+                {
+                    return (doc, null, null, null);
+                }
+
+                var localStream = File.OpenRead(localPath);
+                var localContentType = !string.IsNullOrWhiteSpace(doc.MimeType)
+                    ? doc.MimeType
+                    : GuessContentType(doc.FileName ?? localPath);
+                var localName = string.IsNullOrWhiteSpace(doc.FileName)
+                    ? Path.GetFileName(localPath)
+                    : doc.FileName;
+
+                return (doc, localStream, localContentType, localName);
             }
 
             try

@@ -114,7 +114,7 @@ export function ShipmentTokenList({ onNavigate }) {
                           )}
                         </button>
                       </div>
-                      <p className="text-slate-900 font-mono text-lg mb-3">{shipment.token || shipment.preclearToken || shipment.PreclearToken}</p>
+                      <p className="text-slate-900 font-mono text-lg mb-3">{shipment.token || shipment.preclearToken || shipment.PreclearToken || 'N/A'}</p>
                       <div className="flex items-center gap-2">
                         <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
@@ -136,7 +136,7 @@ export function ShipmentTokenList({ onNavigate }) {
                   <p className="text-slate-500 text-sm mb-1">Shipment Details</p>
                   <p className="text-slate-900 font-semibold mb-2">{shipment.title || shipment.productName || 'Shipment'}</p>
                   <p className="text-slate-600 text-sm mb-1">
-                    <strong>ID:</strong> {shipment.id}
+                    <strong>Reference:</strong> {shipment.referenceId || `#${shipment.id}`}
                   </p>
                   <p className="text-slate-600 text-sm mb-1">
                     <strong>Route:</strong> {shipment.shipper?.city || 'N/A'}, {shipment.shipper?.country || 'N/A'} → {shipment.consignee?.city || 'N/A'}, {shipment.consignee?.country || 'N/A'}

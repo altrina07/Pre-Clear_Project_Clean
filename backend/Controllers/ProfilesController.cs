@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -77,15 +78,15 @@ namespace PreClear.Api.Controllers
                     user.IsActive,
                     Profile = user.ShipperProfile == null ? null : new
                     {
-                        user.ShipperProfile.AddressLine1,
-                        user.ShipperProfile.AddressLine2,
-                        user.ShipperProfile.City,
-                        user.ShipperProfile.State,
-                        user.ShipperProfile.PostalCode,
-                        user.ShipperProfile.CountryCode,
-                        user.ShipperProfile.Timezone,
-                        user.ShipperProfile.Language,
-                        user.ShipperProfile.CompanyRole
+                        AddressLine1 = user.ShipperProfile.AddressLine1 ?? string.Empty,
+                        AddressLine2 = user.ShipperProfile.AddressLine2 ?? string.Empty,
+                        City = user.ShipperProfile.City ?? string.Empty,
+                        State = user.ShipperProfile.State ?? string.Empty,
+                        PostalCode = user.ShipperProfile.PostalCode ?? string.Empty,
+                        CountryCode = user.ShipperProfile.CountryCode ?? string.Empty,
+                        Timezone = user.ShipperProfile.Timezone ?? string.Empty,
+                        Language = user.ShipperProfile.Language ?? string.Empty,
+                        CompanyRole = user.ShipperProfile.CompanyRole ?? string.Empty
                     }
                 };
             }
@@ -103,15 +104,15 @@ namespace PreClear.Api.Controllers
                     user.IsActive,
                     Profile = user.BrokerProfile == null ? null : new
                     {
-                        user.BrokerProfile.LicenseNumber,
-                        user.BrokerProfile.YearsOfExperience,
-                        user.BrokerProfile.OriginCountries,
-                        user.BrokerProfile.DestinationCountries,
-                        user.BrokerProfile.HsCategories,
-                        user.BrokerProfile.Timezone,
-                        user.BrokerProfile.Language,
-                        user.BrokerProfile.IsAvailable,
-                        user.BrokerProfile.MaxConcurrentShipments
+                        LicenseNumber = user.BrokerProfile.LicenseNumber ?? string.Empty,
+                        YearsOfExperience = user.BrokerProfile.YearsOfExperience,
+                        OriginCountries = user.BrokerProfile.OriginCountries ?? new List<string>(),
+                        DestinationCountries = user.BrokerProfile.DestinationCountries ?? new List<string>(),
+                        HsCategories = user.BrokerProfile.HsCategories ?? new List<string>(),
+                        Timezone = user.BrokerProfile.Timezone ?? string.Empty,
+                        Language = user.BrokerProfile.Language ?? string.Empty,
+                        IsAvailable = user.BrokerProfile.IsAvailable,
+                        MaxConcurrentShipments = user.BrokerProfile.MaxConcurrentShipments
                     }
                 };
             }
