@@ -20,14 +20,20 @@ import {
   Box,
   RefreshCw,
   Send,
-  Trash2
+  Trash2,
+  Pencil,
+  Download,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import { useShipments } from '../../hooks/useShipments';
 import { getShipmentById, pollShipmentStatus, submitAi, updateShipmentStatus as apiUpdateShipmentStatus, generateToken as apiGenerateToken, assignBroker } from '../../api/shipments';
+import http, { getAuthToken } from '../../api/http';
+import { uploadShipmentDocument, listShipmentDocuments, downloadShipmentDocument } from '../../api/documents';
 import { ShipmentChatPanel } from '../ShipmentChatPanel';
 import { shipmentsStore } from '../../store/shipmentsStore';
 import { getCurrencyByCountry, formatCurrency } from '../../utils/validation';
-import ShipmentDocumentsPanel from './ShipmentDocumentsPanel';
+// ShipmentDocumentsPanel removed per new flow; documents now listed read-only above AI section
 
 // Helper function to format time to 12-hour format with AM/PM
 const formatTimeWithAmPm = (timeString) => {
@@ -58,12 +64,18 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
   const [error, setError] = useState(errorOverride);
   const [chatOpen, setChatOpen] = useState(false);
   const [viewingDocument, setViewingDocument] = useState(null);
+  const [s3Docs, setS3Docs] = useState([]);
+  const [viewerUrl, setViewerUrl] = useState(null);
   const [uploadingDocKey, setUploadingDocKey] = useState(null);
   const [aiProcessing, setAiProcessing] = useState(false);
   const [requestingBroker, setRequestingBroker] = useState(false);
   const [showTokenNotification, setShowTokenNotification] = useState(false);
   const [resubmittingToBroker, setResubmittingToBroker] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [reuploadingDocId, setReuploadingDocId] = useState(null);
+  const [uploadingAdditionalDoc, setUploadingAdditionalDoc] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [deletingDocId, setDeletingDocId] = useState(null);
   
   // Initialize from props and set loading state
   // Sync loading/error overrides from parent route
@@ -112,6 +124,53 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
     init();
     return () => { cancelled = true; };
   }, [routeId, loadingOverride]);
+    // Load S3 documents list for viewer mapping
+    useEffect(() => {
+      const loadDocs = async () => {
+        if (!currentShipment?.id) return;
+        try {
+          const docs = await listShipmentDocuments(currentShipment.id);
+          setS3Docs(Array.isArray(docs) ? docs : []);
+        } catch (e) {
+          console.warn('[ShipmentDetails] Failed to list shipment documents:', e);
+          setS3Docs([]);
+        }
+      };
+      loadDocs();
+    }, [currentShipment?.id]);
+
+    // Resolve and preview the selected document inside modal
+    useEffect(() => {
+      let revoked = false;
+      const resolveAndLoad = async () => {
+        if (!viewingDocument || !currentShipment?.id) return;
+        try {
+          const match = s3Docs.find(d => {
+            if (viewingDocument.id) return d.id === viewingDocument.id;
+            if (d.fileName && viewingDocument.name && d.fileName === viewingDocument.name) return true;
+            if (d.documentType && viewingDocument.name && d.documentType === viewingDocument.name) return true;
+            return false;
+          });
+          if (!match?.id) {
+            console.warn('[ShipmentDetails] Could not find S3 doc for viewing:', viewingDocument);
+            setViewerUrl(null);
+            return;
+          }
+          const { blob } = await downloadShipmentDocument(match.id);
+          const url = URL.createObjectURL(blob);
+          if (!revoked) setViewerUrl(url);
+        } catch (e) {
+          console.error('[ShipmentDetails] Failed to load document for viewing:', e);
+          setViewerUrl(null);
+        }
+      };
+      resolveAndLoad();
+      return () => {
+        revoked = true;
+        if (viewerUrl) URL.revokeObjectURL(viewerUrl);
+        setViewerUrl(null);
+      };
+    }, [viewingDocument, s3Docs]);
   
   // currency/approval normalization moved below hard guard
   
@@ -182,16 +241,62 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
     return [];
   });
 
+  useEffect(() => {
+    if (!Array.isArray(documents) || documents.length === 0) return;
+    if (!Array.isArray(s3Docs) || s3Docs.length === 0) return;
+
+    setDocuments(prev => prev.map(doc => {
+      const match = s3Docs.find(d => {
+        const typeMatch = d.documentType && doc.name && d.documentType.toLowerCase() === doc.name.toLowerCase();
+        const fileMatch = d.fileName && doc.fileName && d.fileName.toLowerCase() === doc.fileName.toLowerCase();
+        return typeMatch || fileMatch;
+      });
+
+      if (!match) return doc;
+
+      return {
+        ...doc,
+        uploaded: true,
+        fileName: match.fileName || doc.fileName,
+      };
+    }));
+  }, [s3Docs]);
+
+  // Download handler for documents
+  const handleDownloadDocument = async (doc) => {
+    try {
+      const { blob, fileName } = await downloadShipmentDocument(doc.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName || doc.fileName || doc.documentType || `document-${doc.id}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading document:', err);
+      alert('Failed to download document. Please try again.');
+    }
+  };
+
   // Handle file selection and upload for a document
-  const handleFileSelect = (docIndex, e) => {
+  const handleFileSelect = async (docIndex, e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
 
     const docKey = documents[docIndex].key;
+    const docName = documents[docIndex].name;
+    console.log(`[handleFileSelect] Uploading ${docName} (${docKey}):`, file.name);
     setUploadingDocKey(docKey);
 
-    // Simulate upload time and then persist uploaded metadata to the shipment
-    setTimeout(() => {
+    try {
+      console.log(`[handleFileSelect] Calling API to upload to S3 for shipment ${currentShipment.id}`);
+      // Upload to S3 via API so it appears in ShipmentDocumentsPanel
+      await uploadShipmentDocument(currentShipment.id, file, docName);
+      console.log(`[handleFileSelect] Upload successful for ${docName}`);
+
+      // Update local state
       const updatedDocs = [...documents];
       updatedDocs[docIndex].uploaded = true;
       updatedDocs[docIndex].fileName = file.name;
@@ -214,11 +319,121 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
       shipmentsStore.saveShipment(shipmentFromStore);
       const refreshed = shipmentsStore.getShipmentById(currentShipment.id) || shipmentFromStore;
       setCurrentShipment(refreshed);
+      console.log('[handleFileSelect] State updated, doc marked as uploaded:', docKey);
+    } catch (err) {
+      console.error('[handleFileSelect] Upload failed:', err);
+      setError(`Failed to upload ${docName}: ${err.message}`);
+    } finally {
       setUploadingDocKey(null);
-    }, 1500);
+    }
   };
 
   // Delete an uploaded document (remove metadata from shipment and UI)
+  // Handle re-uploading an existing S3 document (replaces old with new)
+  const handleReuploadDocument = async (docId, e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file || !currentShipment?.id) return;
+
+    setReuploadingDocId(docId);
+    try {
+      // Find the doc to get its type for proper naming
+      const docToReplace = s3Docs.find(d => d.id === docId);
+      const docType = docToReplace?.documentType || 'Document';
+
+      console.log(`[handleReuploadDocument] Re-uploading document ${docId} with new file:`, file.name);
+
+      // Upload new file to S3
+      await uploadShipmentDocument(currentShipment.id, file, docType);
+      console.log(`[handleReuploadDocument] New file uploaded successfully`);
+
+      // Refresh the documents list from backend to show the new file
+      const updatedDocs = await listShipmentDocuments(currentShipment.id);
+      setS3Docs(Array.isArray(updatedDocs) ? updatedDocs : []);
+      console.log(`[handleReuploadDocument] Documents list refreshed`);
+    } catch (err) {
+      console.error('[handleReuploadDocument] Re-upload failed:', err);
+      setError(`Failed to re-upload document: ${err.message}`);
+    } finally {
+      setReuploadingDocId(null);
+    }
+  };
+
+  // Delete a document from S3 and database
+  const handleDeleteS3Document = async (docId) => {
+    if (!currentShipment?.id || !docId) return;
+    
+    const confirmDelete = window.confirm('Are you sure you want to delete this document? This action cannot be undone.');
+    if (!confirmDelete) return;
+
+    setDeletingDocId(docId);
+    try {
+      console.log(`[handleDeleteS3Document] Deleting document ${docId}`);
+      console.log(`[handleDeleteS3Document] API call: DELETE /Documents/${docId}`);
+      
+      // Call backend to delete the document (removes from both S3 and database)
+      await http.delete(`/Documents/${docId}`);
+      console.log(`[handleDeleteS3Document] Document deleted successfully from S3 and database`);
+
+      // Close viewer if this document was being viewed
+      if (viewingDocument?.id === docId) {
+        setViewingDocument(null);
+        setZoomLevel(100);
+      }
+
+      // Immediately remove from UI state for instant feedback
+      setS3Docs(prevDocs => {
+        const filtered = prevDocs.filter(d => d.id !== docId);
+        console.log(`[handleDeleteS3Document] Removed document ${docId} from UI. Remaining docs:`, filtered.length);
+        return filtered;
+      });
+
+      // Also refresh from backend to ensure consistency
+      try {
+        const updatedDocs = await listShipmentDocuments(currentShipment.id);
+        setS3Docs(Array.isArray(updatedDocs) ? updatedDocs : []);
+        console.log(`[handleDeleteS3Document] Refreshed document list from backend`);
+      } catch (refreshErr) {
+        console.warn('[handleDeleteS3Document] Could not refresh document list, but delete was successful:', refreshErr);
+      }
+    } catch (err) {
+      console.error('[handleDeleteS3Document] Delete failed:', err);
+      console.error('[handleDeleteS3Document] Error response:', err?.response);
+      console.error('[handleDeleteS3Document] Error status:', err?.response?.status);
+      console.error('[handleDeleteS3Document] Error data:', err?.response?.data);
+      console.error('[handleDeleteS3Document] Request URL:', err?.config?.url);
+      const errorMessage = err?.response?.data?.error || err?.response?.data?.detail || err.message || 'Failed to delete document';
+      setError(`Failed to delete document: ${errorMessage}`);
+      alert(`Error deleting document: ${errorMessage}. Please check console for details.`);
+    } finally {
+      setDeletingDocId(null);
+    }
+  };
+
+  // Handle uploading additional documents (not from the required list)
+  const handleUploadAdditionalDocument = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file || !currentShipment?.id) return;
+
+    setUploadingAdditionalDoc(true);
+    try {
+      console.log(`[handleUploadAdditionalDocument] Uploading additional document:`, file.name);
+      
+      // Upload to S3 with the actual file name (without extension) as document type
+      const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
+      await uploadShipmentDocument(currentShipment.id, file, fileNameWithoutExt);
+      console.log(`[handleUploadAdditionalDocument] Upload successful`);
+
+      // Refresh the documents list
+      const updatedDocs = await listShipmentDocuments(currentShipment.id);
+      setS3Docs(Array.isArray(updatedDocs) ? updatedDocs : []);
+    } catch (err) {
+      console.error('[handleUploadAdditionalDocument] Upload failed:', err);
+      setError(`Failed to upload additional document: ${err.message}`);
+    } finally {
+      setUploadingAdditionalDoc(false);
+    }
+  };
+
   const handleDeleteDocument = (docIndex) => {
     const doc = documents[docIndex];
     if (!doc) return;
@@ -272,36 +487,133 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
   };
 
   const handleRequestAIEvaluation = async () => {
-    if (!currentShipment?.id) return;
+    console.log('[handleRequestAIEvaluation] Starting AI evaluation...');
+    console.log('[handleRequestAIEvaluation] Current shipment:', currentShipment?.id);
+    console.log('[handleRequestAIEvaluation] All required docs uploaded:', allRequiredDocsUploaded);
+    console.log('[handleRequestAIEvaluation] Documents state:', documents);
+    
+    if (!currentShipment?.id) {
+      console.error('[handleRequestAIEvaluation] No shipment ID!');
+      return;
+    }
+    if (!allRequiredDocsUploaded) {
+      console.error('[handleRequestAIEvaluation] Not all required docs uploaded!');
+      setError('Please upload all required documents before running AI evaluation.');
+      return;
+    }
     setAiProcessing(true);
     setError(null);
+    console.log('[handleRequestAIEvaluation] AI processing started...');
     
-    // Auto-approve after exactly 3 seconds (demo mode)
-    setTimeout(async () => {
+    try {
+      // Prefer centralized token getter used by axios interceptors
+      const token = getAuthToken();
+      console.log('[handleRequestAIEvaluation] Token present:', !!token);
+      if (!token) {
+        console.error('[handleRequestAIEvaluation] No auth token in any key!');
+        setError('You must be signed in to run AI validation. Please log in and try again.');
+        setAiProcessing(false);
+        return;
+      }
+
+      console.log('[handleRequestAIEvaluation] Calling validation API for shipment:', currentShipment.id);
+      // Use shared axios client so baseURL and Authorization are applied
+      const resp = await http.post(`/Documents/shipments/${currentShipment.id}/validate`, {});
+      const data = resp?.data || {};
+      console.log('[handleRequestAIEvaluation] ✅ Validation Result:', data);
+
+      // Extract approval status and compliance score from response
+      const isApproved = (data.success !== undefined) ? !!data.success : true;
+      const complianceScore = data.validationScore || 0;
+      const packingNotes = data.packingNotes || data.message || '';
+      const issues = data.issues || [];
+
+      console.log('[handleRequestAIEvaluation] Extracted results:', {
+        isApproved,
+        complianceScore,
+        packingNotes,
+        issues
+      });
+
+      // Update shipment with AI results
+      const updated = {
+        ...currentShipment,
+        aiApprovalStatus: isApproved ? 'approved' : 'rejected',
+        AiApprovalStatus: isApproved ? 'approved' : 'rejected',
+        aiComplianceScore: complianceScore,
+        AiComplianceScore: complianceScore,
+        status: isApproved ? 'ai-approved' : 'ai-rejected',
+        packingNotes: packingNotes,
+        validationIssues: issues,
+        validationResult: data,
+        brokerApprovalStatus: currentShipment?.brokerApprovalStatus ?? currentShipment?.BrokerApprovalStatus ?? 'not-started',
+        BrokerApprovalStatus: currentShipment?.BrokerApprovalStatus ?? currentShipment?.brokerApprovalStatus ?? 'not-started'
+      };
+
+      console.log('[handleRequestAIEvaluation] Updating shipment state:', updated);
+      // Persist to store so dashboard reflects changes immediately
+      shipmentsStore.saveShipment(updated);
+      setCurrentShipment(updated);
+      console.log('[handleRequestAIEvaluation] State updated successfully');
+
+      // Fetch fresh data from backend to ensure sync
       try {
-        // Update status to ai-approved (backend + local/store) without waiting for a fetch
-        await apiUpdateShipmentStatus(currentShipment.id, 'ai-approved');
+        console.log('[handleRequestAIEvaluation] Refreshing shipment data from backend...');
+        const freshData = await getShipmentById(currentShipment.id);
+        const freshShipment = freshData?.shipment || freshData?.Shipment || freshData;
+        if (freshShipment) {
+          console.log('[handleRequestAIEvaluation] Fresh data received:', freshShipment);
+          shipmentsStore.saveShipment(freshShipment);
+          setCurrentShipment(freshShipment);
+        }
+      } catch (fetchErr) {
+        console.warn('[handleRequestAIEvaluation] Could not refresh shipment from backend:', fetchErr);
+        // Continue with local data if refresh fails
+      }
+
+      if (!isApproved) {
+        const errorMessages = issues?.map(i => `${i.category}: ${i.message}`).join('\n') || packingNotes || 'Validation failed';
+        console.log('[handleRequestAIEvaluation] ❌ Validation rejected:', errorMessages);
+        setError(`Validation failed:\n${errorMessages}`);
+      } else {
+        console.log('[handleRequestAIEvaluation] ✅ Validation approved!');
+      }
+    } catch (err) {
+      console.error('[handleRequestAIEvaluation] ❌ AI evaluation error:', err);
+      console.error('[handleRequestAIEvaluation] Error stack:', err.stack);
+      // Extract backend-provided details for failed validation (400)
+      const data = err?.response?.data;
+      if (data) {
+        const issues = data.issues || [];
+        const packingNotes = data.packingNotes || data.message || '';
+        const complianceScore = typeof data.validationScore === 'number' ? data.validationScore : 0;
 
         const updated = {
-          ...(currentShipment || {}),
-          status: 'ai-approved',
-          Status: 'ai-approved',
-          aiApprovalStatus: 'approved',
-          AiApprovalStatus: 'approved',
-          brokerApprovalStatus: currentShipment?.brokerApprovalStatus ?? currentShipment?.BrokerApprovalStatus ?? 'not-started',
-          BrokerApprovalStatus: currentShipment?.BrokerApprovalStatus ?? currentShipment?.brokerApprovalStatus ?? 'not-started'
+          ...currentShipment,
+          aiApprovalStatus: 'rejected',
+          AiApprovalStatus: 'rejected',
+          aiComplianceScore: complianceScore,
+          AiComplianceScore: complianceScore,
+          status: 'ai-rejected',
+          packingNotes: packingNotes,
+          validationIssues: issues,
+          validationResult: data
         };
-
-        // Persist to store so all views see the evaluated state immediately
         shipmentsStore.saveShipment(updated);
         setCurrentShipment(updated);
-      } catch (err) {
-        console.error('AI approval error:', err);
-        setError(err?.message || 'Failed to update AI approval');
-      } finally {
-        setAiProcessing(false);
+
+        const errorMessages = issues.map(i => {
+          const suggestion = i.suggestedAction ? `\n→ Suggestion: ${i.suggestedAction}` : '';
+          return `${i.category}: ${i.message}${suggestion}`;
+        }).join('\n');
+        setError(errorMessages || (data.message || 'Validation failed'));
+      } else {
+        setError(err?.message || 'Failed to run AI evaluation. Please try again.');
       }
-    }, 3000);
+    } finally {
+      console.log('[handleRequestAIEvaluation] AI processing completed, setting aiProcessing to false');
+      setAiProcessing(false);
+    }
   };
 
   const handleRequestBrokerApproval = async () => {
@@ -394,7 +706,19 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
     currentShipment?.preclearToken ??
     null;
 
-  const allRequiredDocsUploaded = documents.filter(d => d.required).every(d => d.uploaded);
+  const requiredDocs = documents.filter(d => d.required !== false);
+  const allRequiredDocsUploaded = requiredDocs.length === 0
+    ? (Array.isArray(s3Docs) ? s3Docs.length > 0 : true)
+    : requiredDocs.every(d => d.uploaded);
+  console.log('[ShipmentDetails] Document check:', {
+    documents,
+    totalDocs: documents.length,
+    requiredDocs: documents.filter(d => d.required),
+    requiredDocsCount: documents.filter(d => d.required).length,
+    allRequiredDocsUploaded,
+    aiApproval,
+    currentShipmentId: currentShipment?.id
+  });
   const canRequestAI = currentShipment && allRequiredDocsUploaded && (aiApproval !== 'approved');
   const canRequestBroker = currentShipment && aiApproval === 'approved' && 
     (brokerApproval === 'not-started' || !brokerApproval);
@@ -422,8 +746,10 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
       { name: 'Bill of Lading (BOL)', key: 'bol', uploaded: uploadedDocs.bol?.uploaded || false, fileName: uploadedDocs.bol?.name || '', required: false },
       { name: 'CMR (International Road Transport)', key: 'cmr', uploaded: uploadedDocs.cmr?.uploaded || false, fileName: uploadedDocs.cmr?.name || '', required: false },
     ];
-    setDocuments(documentsList.filter(d => shipmentDocs[d.key]));
-  }, [currentShipment?.id]);
+    console.log('[ShipmentDetails] Document update:', { totalDocs: documentsList.length, required: documentsList.filter(d => d.required).length });
+    // Include ALL documents, don't filter - always show required docs for upload
+    setDocuments(documentsList);
+  }, [currentShipment?.id, currentShipment?.uploadedDocuments]);
 
   // Reflect backend AI running state based on currentShipment
   useEffect(() => {
@@ -483,13 +809,23 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
             <h1 className="text-slate-900 mb-2">Shipment Details</h1>
             {/* <p className="text-slate-600">Complete shipment ID: {shipmentData.id}</p> */}
           </div>
-          <button
-            onClick={() => setChatOpen(true)}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
-          >
-            <MessageCircle className="w-4 h-4" />
-            Chat with Broker
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => onNavigate && onNavigate('create-shipment', currentShipment)}
+              title="Edit Shipment"
+              className="px-3 py-2 bg-slate-100 text-slate-800 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-2 border border-slate-300"
+            >
+              <Pencil className="w-4 h-4" />
+              Edit
+            </button>
+            <button
+              onClick={() => setChatOpen(true)}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Chat with Broker
+            </button>
+          </div>
         </div>
       </div>
 
@@ -565,12 +901,6 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Main Workflow */}
         <div className="lg:col-span-2 space-y-6">
-          {currentShipment?.id && (
-            <ShipmentDocumentsPanel
-              shipmentId={currentShipment.id}
-              allowUpload={currentShipment?.status !== 'token-generated'}
-            />
-          )}
 
           {/* Comprehensive Shipment Details */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
@@ -777,204 +1107,95 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
             </div>
           </div>
 
-          {/* Document Upload Section */}
+          {/* Uploaded Documents Section (read-only, listed above AI section) */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-slate-900">Upload Documents</h2>
-              {allRequiredDocsUploaded && (
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3" />
-                  All Required Uploaded
-                </span>
-              )}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-slate-900">Uploaded Documents</h2>
+              <div className="flex items-center gap-3">
+                {allRequiredDocsUploaded && (
+                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    All Required Uploaded
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.onchange = (e) => handleUploadAdditionalDocument(e);
+                    input.click();
+                  }}
+                  disabled={uploadingAdditionalDoc}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  title="Upload additional documents"
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload
+                </button>
+              </div>
             </div>
-            
-            {currentShipment?.brokerApproval === 'documents-requested' && (
-              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-red-900 mb-1">Additional Documents Requested</p>
-                    <p className="text-red-700 text-sm mb-2">
-                      The broker has requested additional documentation. Please upload the missing documents below.
-                    </p>
-                    {currentShipment?.brokerNotes && (
-                      <p className="text-red-800 text-sm italic border-l-2 border-red-400 pl-3 mt-2">
-                        Broker note: {currentShipment?.brokerNotes}
-                      </p>
-                    )}
-                  </div>
-                </div>
+
+            {(!Array.isArray(s3Docs) || s3Docs.length === 0) && (
+              <div className="p-4 border border-slate-200 bg-slate-50 rounded-lg text-slate-600">
+                No documents available. Please upload required documents during shipment creation.
               </div>
             )}
 
-            <div className="space-y-3">
-              {documents.map((doc, index) => (
-                <div
-                  key={index}
-                  className={`p-4 rounded-lg border-2 ${
-                    doc.uploaded ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {doc.uploaded ? (
-                        <CheckCircle className="w-5 h-5 text-green-600" />
-                      ) : (
-                        <FileText className="w-5 h-5 text-slate-400" />
-                      )}
-                      <div>
-                        <span className="text-slate-900">{doc.name}</span>
-                        {doc.required && !doc.uploaded && (
-                          <span className="ml-2 text-xs text-red-600">* Required</span>
-                        )}
-                        {doc.uploaded && (
-                          <p className="text-xs text-slate-500 mt-1">Uploaded: {doc.fileName}</p>
-                        )}
-                      </div>
-                    </div>
-                    {/* Hidden file input (used for both upload and re-upload) */}
-                    <input
-                      id={`file-input-${doc.key}`}
-                      type="file"
-                      accept="application/pdf,image/*"
-                      className="hidden"
-                      onChange={(e) => handleFileSelect(index, e)}
-                    />
-
-                    {!doc.uploaded ? (
-                      <button
-                        onClick={() => document.getElementById(`file-input-${doc.key}`).click()}
-                        disabled={uploadingDocKey === doc.key}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm disabled:opacity-50 flex items-center gap-2"
-                      >
-                        {uploadingDocKey === doc.key ? (
-                          <>
-                            <Loader className="w-4 h-4 animate-spin" />
-                            Uploading...
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4" />
-                            Upload Document
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setViewingDocument({ name: doc.fileName || doc.name || doc.key, key: doc.key, shipmentId: currentShipment.id, source: 'form' })}
-                          className="px-3 py-2 bg-slate-50 text-slate-700 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors text-sm"
-                          disabled={!currentShipment?.id}
-                          title={!currentShipment?.id ? "Shipment data loading..." : "View Document"}
-                        >
-                          View
-                        </button>
-                        <button
-                          onClick={() => document.getElementById(`file-input-${doc.key}`).click()}
-                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                        >
-                          Re-upload
-                        </button>
-                        <button
-                          onClick={() => handleDeleteDocument(index)}
-                          className="p-2 text-red-600 rounded hover:bg-red-50 transition-colors"
-                          aria-label={`Delete ${doc.name}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {/* Chat & Form Uploaded Documents Section */}
-              {currentShipment?.uploadedDocuments && Object.keys(currentShipment.uploadedDocuments).length > 0 && (
-                <div className="mt-6 pt-6 border-t border-slate-200">
-                  {/* Separate form documents from chat documents */}
-                  {(() => {
-                    const formDocs = Object.entries(currentShipment?.uploadedDocuments || {}).filter(([_, doc]) => doc.source === 'form');
-                    const chatDocs = Object.entries(currentShipment?.uploadedDocuments || {}).filter(([_, doc]) => !doc.source || doc.source !== 'form');
-                    
+            {Array.isArray(s3Docs) && s3Docs.length > 0 && (
+              <div className="space-y-3">
+                {s3Docs
+                  .sort((a, b) => new Date(b.uploadedAt || b.createdAt || 0) - new Date(a.uploadedAt || a.createdAt || 0))
+                  .map((doc) => {
+                    const displayName = doc.documentType || doc.fileName || `Document ${doc.id}`;
                     return (
-                      <>
-                        {/* Form Uploaded Documents */}
-                        {formDocs.length > 0 && (
-                          <div className="mb-6">
-                            <h3 className="text-slate-900 font-semibold mb-4">Documents from Shipment Form</h3>
-                            <div className="space-y-3">
-                              {formDocs.map(([key, doc]) => (
-                                <div key={key} className="p-4 rounded-lg border-2 bg-green-50 border-green-200">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                      <CheckCircle className="w-5 h-5 text-green-600" />
-                                      <div>
-                                        <span className="text-slate-900">{doc.name || key}</span>
-                                        {doc.fileName && (
-                                          <p className="text-xs text-slate-500 mt-1">File: {doc.fileName}</p>
-                                        )}
-                                        {doc.uploadedAt && (
-                                          <p className="text-xs text-slate-500 mt-1">Uploaded: {new Date(doc.uploadedAt).toLocaleDateString()} {new Date(doc.uploadedAt).toLocaleTimeString()}</p>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        onClick={() => handleViewDocument(doc.name || key)}
-                                        className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
-                                      >
-                                        View
-                                      </button>
-                                      <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Form</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Chat Uploaded Documents */}
-                        {chatDocs.length > 0 && (
+                      <div
+                        key={doc.id || displayName}
+                        className="w-full p-4 rounded-lg border-2 border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-colors flex items-center justify-between group"
+                      >
+                        <button
+                          onClick={() => setViewingDocument({ id: doc.id, name: doc.fileName || doc.documentType || displayName })}
+                          className="flex-1 text-left flex items-center gap-3 cursor-pointer"
+                          title="Click to view document"
+                        >
+                          <FileText className="w-5 h-5 text-slate-500" />
                           <div>
-                            <h3 className="text-slate-900 font-semibold mb-4">Documents from Chat</h3>
-                            <div className="space-y-3">
-                              {chatDocs.map(([key, doc]) => (
-                                <div key={key} className="p-4 rounded-lg border-2 bg-purple-50 border-purple-200">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                      <CheckCircle className="w-5 h-5 text-purple-600" />
-                                      <div>
-                                        <span className="text-slate-900">{doc.name || key}</span>
-                                        {doc.uploadedAt && (
-                                          <p className="text-xs text-slate-500 mt-1">Uploaded: {new Date(doc.uploadedAt).toLocaleDateString()} {new Date(doc.uploadedAt).toLocaleTimeString()}</p>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        onClick={() => handleViewDocument(doc.name || key)}
-                                        className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
-                                      >
-                                        View
-                                      </button>
-                                      <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">Chat</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
+                            <span className="text-slate-900 font-medium hover:text-blue-600">{displayName}</span>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {doc.fileName ? `File: ${doc.fileName}` : 'File attached'}{doc.uploadedAt ? ` • Uploaded: ${new Date(doc.uploadedAt).toLocaleString()}` : ''}
+                            </p>
                           </div>
-                        )}
-                      </>
+                        </button>
+                        <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadDocument(doc);
+                            }}
+                            className="flex items-center justify-center w-10 h-10 rounded-lg bg-green-100 hover:bg-green-200 transition-colors"
+                            title="Download document"
+                          >
+                            <Download className="w-5 h-5 text-green-700" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const input = document.createElement('input');
+                              input.type = 'file';
+                              input.onchange = (fileEvent) => handleReuploadDocument(doc.id, fileEvent);
+                              input.click();
+                            }}
+                            disabled={reuploadingDocId === doc.id}
+                            className="flex items-center justify-center w-10 h-10 rounded-lg bg-amber-100 hover:bg-amber-200 transition-colors disabled:opacity-50"
+                            title="Re-upload document (replaces old file)"
+                          >
+                            <RefreshCw className={`w-5 h-5 text-amber-700 ${reuploadingDocId === doc.id ? 'animate-spin' : ''}`} />
+                          </button>
+                        </div>
+                      </div>
                     );
-                  })()}
-                </div>
-              )}
-            </div>
-            
-            
+                  })}
+              </div>
+            )}
           </div>
 
           {/* AI Evaluation Section - Improved Design */}
@@ -1005,14 +1226,32 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
               </div>
             )}
 
-            {allRequiredDocsUploaded && aiApproval !== 'approved' && !aiProcessing && (
+            {aiApproval !== 'approved' && !aiProcessing && (
               <div className="space-y-4">
                 <p className="text-slate-700">
                   Your documents are ready. Let our AI analyze compliance rules and regulations for your shipment.
                 </p>
                 <button
-                  onClick={handleRequestAIEvaluation}
-                  className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all transform hover:scale-105 font-bold flex items-center justify-center gap-2 shadow-lg"
+                  onClick={() => {
+                    console.log('[Start AI Evaluation Button] Clicked!', {
+                      allRequiredDocsUploaded,
+                      documents,
+                      shipmentId: currentShipment?.id
+                    });
+                    if (!allRequiredDocsUploaded) {
+                      console.error('[Start AI Evaluation Button] Not all required docs uploaded!');
+                      setError('Please upload all required documents before running AI evaluation.');
+                      return;
+                    }
+                    console.log('[Start AI Evaluation Button] Calling handleRequestAIEvaluation...');
+                    handleRequestAIEvaluation();
+                  }}
+                  disabled={!allRequiredDocsUploaded}
+                  className={`w-full px-6 py-4 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg transition-all ${
+                    allRequiredDocsUploaded
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105'
+                      : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                  }`}
                 >
                   <Zap className="w-5 h-5" />
                   Start AI Evaluation
@@ -1043,8 +1282,75 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
                   <p className="text-slate-600 text-sm mt-2">
                     Your shipment meets all customs regulations and is approved for broker review.
                   </p>
+                  {currentShipment?.aiComplianceScore && (
+                    <p className="text-slate-600 text-xs mt-3">Compliance Score: {currentShipment.aiComplianceScore}%</p>
+                  )}
                 </div>
-                {/* ConstraintsValidationWidget removed as per UI requirements */}
+                {currentShipment?.packingNotes && (
+                  <div className="p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+                    <p className="text-blue-900 font-semibold mb-2">📋 AI Analysis & Packing Notes:</p>
+                    <p className="text-blue-800 text-sm whitespace-pre-wrap">{currentShipment.packingNotes}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {aiApproval === 'rejected' && (
+              <div className="space-y-4">
+                <div className="p-4 bg-red-50 rounded-lg border-2 border-red-300">
+                  <p className="text-red-700 font-bold flex items-center gap-2">
+                    <XCircle className="w-5 h-5" />
+                    ✗ Validation failed
+                  </p>
+                  <p className="text-red-600 text-sm mt-2">
+                    Your shipment did not pass compliance checks. Review the details below and resubmit.
+                  </p>
+                  {currentShipment?.aiComplianceScore && (
+                    <p className="text-red-600 text-xs mt-3">Compliance Score: {currentShipment.aiComplianceScore}%</p>
+                  )}
+                </div>
+                {currentShipment?.packingNotes && (
+                  <div className="p-4 bg-amber-50 rounded-lg border-2 border-amber-200">
+                    <p className="text-amber-900 font-semibold mb-2">⚠️ Issues Found:</p>
+                    <p className="text-amber-800 text-sm whitespace-pre-wrap">{currentShipment.packingNotes}</p>
+                  </div>
+                )}
+                {Array.isArray(currentShipment?.validationIssues) && currentShipment.validationIssues.length > 0 && (
+                  <div className="p-4 bg-white rounded-lg border-2 border-amber-300">
+                    <p className="text-slate-900 font-semibold mb-3">Detailed Issues</p>
+                    <ul className="space-y-3">
+                      {currentShipment.validationIssues.map((issue, idx) => (
+                        <li key={idx} className="border border-slate-200 rounded p-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-slate-900">{issue.category || 'general'}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              issue.severity === 'error' ? 'bg-red-100 text-red-700' : issue.severity === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {issue.severity || 'info'}
+                            </span>
+                          </div>
+                          <p className="text-slate-800 text-sm mt-1">{issue.message}</p>
+                          {issue.details && (
+                            <p className="text-slate-600 text-xs mt-1 whitespace-pre-wrap">{issue.details}</p>
+                          )}
+                          {issue.suggestedAction && (
+                            <p className="text-slate-900 text-xs mt-2">Suggestion: <span className="text-slate-700">{issue.suggestedAction}</span></p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {allRequiredDocsUploaded && (
+                  <button
+                    onClick={handleRequestAIEvaluation}
+                    disabled={aiProcessing}
+                    className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Re-run AI Evaluation
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1349,17 +1655,76 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
       {/* Document Viewer Modal */}
       {viewingDocument && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full p-6">
+          <div className="bg-white rounded-xl max-w-4xl w-full p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-slate-900 text-lg font-semibold">{viewingDocument.name}</h3>
-              <button onClick={() => setViewingDocument(null)} className="text-slate-500 hover:text-slate-700 text-2xl">✕</button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setZoomLevel(prev => Math.min(prev + 25, 200))}
+                  disabled={zoomLevel >= 200}
+                  className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-4 h-4 text-slate-700" />
+                </button>
+                <span className="text-xs text-slate-600 min-w-[3rem] text-center">{zoomLevel}%</span>
+                <button
+                  onClick={() => setZoomLevel(prev => Math.max(prev - 25, 50))}
+                  disabled={zoomLevel <= 50}
+                  className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-4 h-4 text-slate-700" />
+                </button>
+                <button
+                  onClick={() => {
+                    setViewingDocument(null);
+                    setZoomLevel(100);
+                  }}
+                  className="text-slate-500 hover:text-slate-700 text-2xl ml-2"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            <div className="p-4 bg-slate-50 rounded-lg text-center">
-              <p className="text-slate-600">{viewingDocument.message || `Document: ${viewingDocument.name}`}</p>
-              <p className="text-slate-500 text-sm mt-2">In production, the file would be displayed here (PDF viewer, image preview, etc.)</p>
+            <div className="bg-slate-50 rounded-lg overflow-auto" style={{ height: '75vh' }}>
+              {!viewerUrl && (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center text-slate-600">
+                    <Loader className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    <p>Loading preview...</p>
+                  </div>
+                </div>
+              )}
+              {viewerUrl && (
+                <div className="flex items-start justify-center p-4">
+                  <div style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center', transition: 'transform 0.2s' }}>
+                    <iframe 
+                      src={viewerUrl} 
+                      className="rounded border border-slate-200 bg-white"
+                      style={{ width: '700px', height: '900px' }}
+                      title="Document Preview"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="mt-4 flex justify-end">
-              <button onClick={() => setViewingDocument(null)} className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700">
+            <div className="mt-4 flex justify-between">
+              <button
+                onClick={() => viewingDocument?.id && handleDeleteS3Document(viewingDocument.id)}
+                disabled={deletingDocId === viewingDocument?.id}
+                className="flex items-center justify-center w-10 h-10 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                title={deletingDocId === viewingDocument?.id ? 'Deleting document...' : 'Delete document'}
+              >
+                <Trash2 className={`w-5 h-5 ${deletingDocId === viewingDocument?.id ? 'animate-pulse' : ''}`} />
+              </button>
+              <button 
+                onClick={() => {
+                  setViewingDocument(null);
+                  setZoomLevel(100);
+                }} 
+                className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700"
+              >
                 Close
               </button>
             </div>

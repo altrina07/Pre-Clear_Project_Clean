@@ -123,6 +123,88 @@ namespace PreClear.Api.Services
             return await _repo.MarkAsUploadedAsync(shipmentId, documentName);
         }
 
+        public async Task<int> DeleteShipmentDocumentsAsync(long shipmentId)
+        {
+            var docs = await _repo.GetByShipmentIdAsync(shipmentId);
+            if (docs == null || docs.Count == 0)
+            {
+                _logger.LogInformation("No documents to delete for shipment {ShipmentId}", shipmentId);
+                return 0;
+            }
+
+            foreach (var doc in docs)
+            {
+                if (string.IsNullOrWhiteSpace(doc.FilePath))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await _storage.DeleteFileAsync(doc.FilePath);
+                    _logger.LogInformation("Deleted S3 object {Key} for shipment {ShipmentId}", doc.FilePath, shipmentId);
+                }
+                catch (Exception ex)
+                {
+                    // Log and continue so we can attempt to remove remaining files and DB records
+                    _logger.LogWarning(ex, "Failed to delete S3 object {Key} for shipment {ShipmentId}", doc.FilePath, shipmentId);
+                }
+            }
+
+            var removed = await _repo.DeleteByShipmentIdAsync(shipmentId);
+            _logger.LogInformation("Removed {Count} document records for shipment {ShipmentId}", removed, shipmentId);
+            return removed;
+        }
+
+        public async Task<bool> DeleteDocumentAsync(long documentId)
+        {
+            var doc = await _repo.GetByIdAsync(documentId);
+            if (doc == null)
+            {
+                _logger.LogWarning("Document {DocumentId} not found for deletion", documentId);
+                return false;
+            }
+
+            bool s3DeleteSuccess = true;
+            bool dbDeleteSuccess = false;
+
+            // Delete from S3 if file path exists
+            if (!string.IsNullOrWhiteSpace(doc.FilePath))
+            {
+                try
+                {
+                    await _storage.DeleteFileAsync(doc.FilePath);
+                    _logger.LogInformation("Deleted S3 object {Key} for document {DocumentId}", doc.FilePath, documentId);
+                }
+                catch (Exception ex)
+                {
+                    s3DeleteSuccess = false;
+                    _logger.LogError(ex, "Failed to delete S3 object {Key} for document {DocumentId}. Document will still be removed from database.", doc.FilePath, documentId);
+                    // Continue to delete from database even if S3 deletion fails to prevent orphaned records
+                }
+            }
+
+            // Delete from database
+            try
+            {
+                dbDeleteSuccess = await _repo.DeleteByIdAsync(documentId);
+                _logger.LogInformation("Deleted document {DocumentId} from database: {Success}", documentId, dbDeleteSuccess);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete document {DocumentId} from database", documentId);
+                return false;
+            }
+
+            // Log if we have an inconsistent state
+            if (!s3DeleteSuccess && dbDeleteSuccess)
+            {
+                _logger.LogWarning("Document {DocumentId} deleted from database but S3 object {Key} may still exist", documentId, doc.FilePath);
+            }
+
+            return dbDeleteSuccess;
+        }
+
         private static string SlugifyDocType(string docType)
         {
             if (string.IsNullOrWhiteSpace(docType)) return "other";

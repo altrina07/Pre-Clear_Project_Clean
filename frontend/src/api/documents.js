@@ -48,3 +48,21 @@ export function saveBlobToFile(blob, fileName) {
   document.body.removeChild(link);
   window.URL.revokeObjectURL(url);
 }
+
+/**
+ * Validates all documents for a shipment against form data and compliance rules
+ * Returns validation result with status (approved/failed) and list of issues if any
+ */
+export async function validateShipmentDocuments(shipmentId) {
+  const resp = await http.post(`/Documents/shipments/${shipmentId}/validate`);
+  return resp.data;
+}
+
+/**
+ * Gets the current validation status for a shipment
+ * Returns status: not_validated, approved, failed, or error
+ */
+export async function getValidationStatus(shipmentId) {
+  const resp = await http.get(`/Documents/shipments/${shipmentId}/validation-status`);
+  return resp.data;
+}

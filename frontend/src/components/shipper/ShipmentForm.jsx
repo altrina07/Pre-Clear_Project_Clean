@@ -5,9 +5,9 @@ import {
 } from 'lucide-react';
 import { shipmentsStore } from '../../store/shipmentsStore';
 import { suggestHSCode, validateAndCheckHSCode, getCurrencyByCountry } from '../../utils/validation';
-import { getAuthToken } from '../../utils/api';
 import { HsSuggestionPanel } from './HsSuggestionPanel';
 import { createShipment, updateShipment } from '../../api/shipments';
+import { uploadShipmentDocument, markShipmentDocument } from '../../api/documents';
 import { getProfile } from '../../api/auth';
 
 const modes = ['Air', 'Sea', 'Road', 'Rail', 'Courier', 'Multimodal'];
@@ -314,6 +314,8 @@ export function ShipmentForm({ shipment, onNavigate }) {
   });
   const [requiredDocuments, setRequiredDocuments] = useState([]);
   const [documentFiles, setDocumentFiles] = useState({});
+  const [uploadingDocumentName, setUploadingDocumentName] = useState(null);
+  const [documentUploadError, setDocumentUploadError] = useState('');
   const [analyzingDocuments, setAnalyzingDocuments] = useState(false);
   const [documentValidationError, setDocumentValidationError] = useState('');
   const [errors, setErrors] = useState({});
@@ -467,6 +469,58 @@ export function ShipmentForm({ shipment, onNavigate }) {
     };
   }, [shipment, shipperEditable]);
 
+  const uploadDocumentForShipment = async (docName, file) => {
+    if (!file) return;
+
+    setDocumentFiles(prev => ({ ...prev, [docName]: file }));
+
+    // If we do not yet have a numeric shipment ID, defer upload until after submit
+    if (!formData.id || !/^\d+$/.test(formData.id)) {
+      setRequiredDocuments(prev => prev.map(d => d.name === docName ? { ...d, uploaded: true, fileName: file.name } : d));
+      return;
+    }
+
+    setUploadingDocumentName(docName);
+    setDocumentUploadError('');
+
+    try {
+      await uploadShipmentDocument(formData.id, file, docName);
+      await markShipmentDocument(formData.id, file.name);
+      setRequiredDocuments(prev => prev.map(d => d.name === docName ? { ...d, uploaded: true, fileName: file.name } : d));
+      setDocumentFiles(prev => {
+        const next = { ...prev };
+        delete next[docName];
+        return next;
+      });
+    } catch (err) {
+      console.error('[ShipmentForm] Failed to upload document', docName, err);
+      setDocumentUploadError(`Failed to upload ${docName}: ${err?.message || 'unknown error'}`);
+    } finally {
+      setUploadingDocumentName(null);
+    }
+  };
+
+  const uploadPendingDocuments = async (shipmentId) => {
+    setDocumentUploadError('');
+    const entries = Object.entries(documentFiles || {});
+    if (entries.length === 0) return;
+
+    for (const [docName, file] of entries) {
+      try {
+        await uploadShipmentDocument(shipmentId, file, docName);
+        await markShipmentDocument(shipmentId, file.name);
+        setRequiredDocuments(prev => prev.map(d => d.name === docName ? { ...d, uploaded: true, fileName: file.name } : d));
+      } catch (err) {
+        console.error('[ShipmentForm] Failed to upload pending document', docName, err);
+        setDocumentUploadError(`Failed to upload ${docName}: ${err?.message || 'unknown error'}`);
+        throw err;
+      }
+    }
+
+    // Clear pending cache after successful uploads
+    setDocumentFiles({});
+  };
+
   // Auto-fetch AI required documents when entering step 6
   useEffect(() => {
     if (currentStep !== 6) return;
@@ -508,17 +562,21 @@ export function ShipmentForm({ shipment, onNavigate }) {
           uploaded: false
         }));
 
-        // If we have a shipmentId, fetch existing documents to get upload status
+        // If we have a shipmentId, fetch existing documents to map upload status
         if (formData.id) {
           try {
             const docsResponse = await fetch(`/api/documents/shipments/${formData.id}/documents`);
             if (docsResponse.ok) {
               const existingDocs = await docsResponse.json();
-              // Update upload status based on existing documents
               aiDocs.forEach(doc => {
-                const existing = existingDocs.find(d => d.name === doc.name);
-                if (existing && existing.uploaded) {
+                const match = existingDocs.find(d => {
+                  const typeMatch = d.documentType && doc.name && d.documentType.toLowerCase() === doc.name.toLowerCase();
+                  const nameMatch = d.fileName && doc.name && d.fileName.toLowerCase().includes(doc.name.toLowerCase());
+                  return typeMatch || nameMatch;
+                });
+                if (match) {
                   doc.uploaded = true;
+                  doc.fileName = match.fileName || doc.fileName;
                 }
               });
             }
@@ -986,6 +1044,16 @@ export function ShipmentForm({ shipment, onNavigate }) {
       console.log('[ShipmentForm] Prepared shipment for navigation:', updatedShipment);
       console.log('[ShipmentForm] Shipment numeric ID:', updatedShipment.id);
       console.log('[ShipmentForm] Shipment reference ID:', updatedShipment.referenceId);
+
+      // Upload any files selected during step 6 now that we have a shipment ID
+      if (updatedShipment.id) {
+        try {
+          await uploadPendingDocuments(updatedShipment.id);
+        } catch (uploadErr) {
+          console.error('Error uploading pending documents:', uploadErr);
+          alert(`Shipment saved but document upload failed: ${uploadErr?.message || 'unknown error'}`);
+        }
+      }
 
       // Save to local store
       shipmentsStore.saveShipment(updatedShipment);
@@ -1847,35 +1915,7 @@ export function ShipmentForm({ shipment, onNavigate }) {
                               onChange={async (e) => {
                                 const file = e.target.files[0];
                                 if (file) {
-                                  setDocumentFiles(prev => ({ ...prev, [doc.name]: file }));
-                                  
-                                  // Mark document as uploaded in backend if we have a shipmentId
-                                  if (formData.id) {
-                                    try {
-                                      const token = getAuthToken();
-                                      await fetch(`/api/documents/shipments/${formData.id}/mark-uploaded`, {
-                                        method: 'POST',
-                                        headers: {
-                                          'Content-Type': 'application/json',
-                                          ...(token ? { Authorization: `Bearer ${token}` } : {})
-                                        },
-                                        credentials: 'include',
-                                        body: JSON.stringify({ documentName: doc.name })
-                                      });
-                                      
-                                      // Update local state to reflect uploaded status
-                                      setRequiredDocuments(prev => prev.map(d => 
-                                        d.name === doc.name ? { ...d, uploaded: true } : d
-                                      ));
-                                    } catch (err) {
-                                      console.error('Failed to mark document as uploaded:', err);
-                                    }
-                                  } else {
-                                    // For new shipments, just update local state
-                                    setRequiredDocuments(prev => prev.map(d => 
-                                      d.name === doc.name ? { ...d, uploaded: true } : d
-                                    ));
-                                  }
+                                  await uploadDocumentForShipment(doc.name, file);
                                 }
                               }}
                               className="hidden"
@@ -1887,7 +1927,11 @@ export function ShipmentForm({ shipment, onNavigate }) {
                               style={{ ...yellowButtonStyle, outline: 'none', boxShadow: 'none' }}
                             >
                               <Upload className="w-4 h-4" style={{ color: '#2F1B17' }} />
-                              {doc.uploaded || documentFiles[doc.name] ? 'Change File' : 'Upload'}
+                              {uploadingDocumentName === doc.name
+                                ? 'Uploading...'
+                                : doc.uploaded || documentFiles[doc.name]
+                                  ? 'Change File'
+                                  : 'Upload'}
                             </label>
                             {(doc.uploaded || documentFiles[doc.name]) && (
                               <span className="text-sm text-green-700 flex items-center gap-1">
@@ -1915,6 +1959,16 @@ export function ShipmentForm({ shipment, onNavigate }) {
                   <div>
                     <p className="text-sm font-semibold text-red-900">Upload Required</p>
                     <p className="text-sm text-red-700 mt-1">{documentValidationError}</p>
+                  </div>
+                </div>
+              )}
+
+              {documentUploadError && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-900">Document Upload</p>
+                    <p className="text-sm text-amber-700 mt-1">{documentUploadError}</p>
                   </div>
                 </div>
               )}
