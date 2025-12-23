@@ -17,6 +17,7 @@ namespace PreClear.Api.Services
         private readonly IShipmentRepository _shipmentRepo;
         private readonly IS3StorageService _storage;
         private readonly ILogger<DocumentService> _logger;
+        private readonly INotificationService _notificationService;
         private static readonly HashSet<string> _allowedExt = new(StringComparer.OrdinalIgnoreCase)
         {
             ".pdf",
@@ -31,12 +32,13 @@ namespace PreClear.Api.Services
             ".txt"
         };
 
-        public DocumentService(IDocumentRepository repo, IShipmentRepository shipmentRepo, IS3StorageService storage, ILogger<DocumentService> logger)
+        public DocumentService(IDocumentRepository repo, IShipmentRepository shipmentRepo, IS3StorageService storage, ILogger<DocumentService> logger, INotificationService notificationService)
         {
             _repo = repo;
             _shipmentRepo = shipmentRepo;
             _storage = storage;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         public async Task<ShipmentDocument> UploadAsync(long shipmentId, long? uploadedBy, IFormFile file, string docType)
@@ -274,6 +276,68 @@ namespace PreClear.Api.Services
 
         private static string BuildDownloadUrlPlaceholder(long id) =>
             id <= 0 ? "/api/documents/pending/download" : $"/api/documents/{id}/download";
+
+        public async Task<DocumentRequest> RequestDocumentsAsync(long shipmentId, long brokerId, List<string> documentNames, string message)
+        {
+            try
+            {
+                var docNames = string.Join(", ", documentNames ?? new List<string>());
+                _logger.LogInformation("RequestDocumentsAsync: Starting for shipment {ShipmentId}, broker {BrokerId}, docs: {DocNames}", shipmentId, brokerId, docNames);
+                
+                var request = new DocumentRequest
+                {
+                    ShipmentId = shipmentId,
+                    RequestedByBrokerId = brokerId,
+                    RequestedDocumentNames = docNames,
+                    RequestMessage = message,
+                    Status = "pending",
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await _repo.CreateDocumentRequestAsync(request);
+                _logger.LogInformation("Document request saved: ID={RequestId}, Shipment={ShipmentId}", request.Id, shipmentId);
+
+                // Notify shipper (creator of the shipment)
+                var shipment = await _shipmentRepo.GetByIdAsync(shipmentId);
+                _logger.LogInformation("Shipment lookup: ShipmentId={ShipmentId}, Found={Found}", shipmentId, shipment != null);
+                
+                if (shipment != null)
+                {
+                    var shipperId = shipment.CreatedBy;
+                    var title = "Additional Documents Requested";
+                    var messageText = string.IsNullOrWhiteSpace(message)
+                        ? $"Broker requested: {docNames}"
+                        : $"{message}\nRequested: {docNames}";
+                    try
+                    {
+                        await _notificationService.CreateNotificationAsync(shipperId, "document_request", title, messageText, shipmentId);
+                        _logger.LogInformation("Notification created for shipper {ShipperId}", shipperId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to create notification for shipper {UserId} on shipment {ShipmentId}", shipperId, shipmentId);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("Shipment {ShipmentId} not found; skipping shipper notification", shipmentId);
+                }
+
+                return request;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "RequestDocumentsAsync failed for shipment {ShipmentId}", shipmentId);
+                throw;
+            }
+        }
+
+        public async Task<List<DocumentRequest>> GetDocumentRequestsAsync(long shipmentId)
+        {
+            var requests = await _repo.GetDocumentRequestsByShipmentAsync(shipmentId);
+            _logger.LogInformation("Retrieved {Count} document requests for shipment {ShipmentId}", requests.Count, shipmentId);
+            return requests;
+        }
     }
 }
  

@@ -310,6 +310,40 @@ namespace PreClear.Api.Controllers
                 return StatusCode(500, new { error = "internal_error", detail = ex.Message });
             }
         }
+
+        [HttpPost("shipments/{shipmentId}/request-documents")]
+        public async Task<IActionResult> RequestDocuments(long shipmentId, [FromBody] CreateDocumentRequestDto dto)
+        {
+            try
+            {
+                var brokerId = GetUserId();
+                _logger.LogInformation("Broker {BrokerId} requesting documents for shipment {ShipmentId}", brokerId, shipmentId);
+                
+                var request = await _service.RequestDocumentsAsync(shipmentId, brokerId, dto.DocumentNames, dto.Message);
+                
+                return Ok(new { success = true, request });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error requesting documents for shipment {ShipmentId}", shipmentId);
+                return StatusCode(500, new { error = "internal_error", detail = ex.Message });
+            }
+        }
+
+        [HttpGet("shipments/{shipmentId}/document-requests")]
+        public async Task<IActionResult> GetDocumentRequests(long shipmentId)
+        {
+            try
+            {
+                var requests = await _service.GetDocumentRequestsAsync(shipmentId);
+                return Ok(requests);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting document requests for shipment {ShipmentId}", shipmentId);
+                return StatusCode(500, new { error = "internal_error", detail = ex.Message });
+            }
+        }
     }
 }
  

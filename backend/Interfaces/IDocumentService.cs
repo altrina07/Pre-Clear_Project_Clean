@@ -14,6 +14,8 @@ namespace PreClear.Api.Interfaces
         Task<bool> MarkAsUploadedAsync(long shipmentId, string documentName);
         Task<int> DeleteShipmentDocumentsAsync(long shipmentId);
         Task<bool> DeleteDocumentAsync(long documentId);
+        Task<DocumentRequest> RequestDocumentsAsync(long shipmentId, long brokerId, List<string> documentNames, string message);
+        Task<List<DocumentRequest>> GetDocumentRequestsAsync(long shipmentId);
     }
 }
  

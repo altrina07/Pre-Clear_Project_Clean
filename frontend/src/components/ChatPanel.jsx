@@ -4,10 +4,11 @@ import { useMessages, useShipments } from '../hooks/useShipments';
 import { shipmentsStore } from '../store/shipmentsStore';
 
 export function ChatPanel({ shipmentId, userRole, userName, isOpen, onClose }) {
-  const messages = useMessages(shipmentId);
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
   const { loadShipmentMessages, sendShipmentMessage } = useShipments();
 
   useEffect(() => {
@@ -25,6 +26,25 @@ export function ChatPanel({ shipmentId, userRole, userName, isOpen, onClose }) {
     };
 
     fetchMessages();
+  }, [isOpen, shipmentId]);
+
+  useEffect(() => {
+    if (!isOpen || !shipmentId) return;
+
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await listShipmentMessages(shipmentId);
+        setMessages(Array.isArray(data) ? data : []);
+      } catch (err) {
+        setError(err?.message || 'Failed to load messages');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
   }, [isOpen, shipmentId]);
 
   const handleSendMessage = () => {
@@ -78,12 +98,14 @@ export function ChatPanel({ shipmentId, userRole, userName, isOpen, onClose }) {
         )}
         
         {messages.map((message) => {
-          const isCurrentUser = message.sender === userRole;
+          const messageId = message.id || message.Id;
+          const senderLabel = message.senderName || message.SenderName || `User ${message.senderId || message.SenderId || ''}`;
+          const isCurrentUser = message.sender === userRole || message.senderName === userName || message.SenderName === userName;
           const isSystem = message.type === 'system' || message.type === 'document-request';
           
           return (
             <div
-              key={message.id}
+              key={messageId}
               className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
             >
               <div
@@ -98,12 +120,12 @@ export function ChatPanel({ shipmentId, userRole, userName, isOpen, onClose }) {
                 <div className="flex items-center gap-2 mb-1">
                   <User className={`w-3 h-3 ${isCurrentUser ? 'text-blue-100' : 'text-slate-500'}`} />
                   <span className={`text-xs ${isCurrentUser ? 'text-blue-100' : 'text-slate-500'}`}>
-                    {message.senderName}
+                    {senderLabel}
                   </span>
                 </div>
                 <p className="text-sm">{message.message}</p>
                 <p className={`text-xs mt-1 ${isCurrentUser ? 'text-blue-100' : 'text-slate-500'}`}>
-                  {new Date(message.timestamp).toLocaleString()}
+                  {new Date(message.createdAt || message.CreatedAt || message.timestamp).toLocaleString()}
                 </p>
               </div>
             </div>

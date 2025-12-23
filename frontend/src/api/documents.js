@@ -66,3 +66,26 @@ export async function getValidationStatus(shipmentId) {
   const resp = await http.get(`/Documents/shipments/${shipmentId}/validation-status`);
   return resp.data;
 }
+
+/**
+ * Request additional documents from shipper for a shipment
+ * @param {number} shipmentId - The shipment ID
+ * @param {string[]} documentNames - Array of document names to request
+ * @param {string} message - Message to shipper explaining the request
+ */
+export async function requestShipmentDocuments(shipmentId, documentNames, message) {
+  const resp = await http.post(`/Documents/shipments/${shipmentId}/request-documents`, {
+    documentNames,
+    message
+  });
+  return resp.data;
+}
+
+/**
+ * Get all document requests for a shipment
+ * @param {number} shipmentId - The shipment ID
+ */
+export async function getDocumentRequests(shipmentId) {
+  const resp = await http.get(`/Documents/shipments/${shipmentId}/document-requests`);
+  return resp.data;
+}

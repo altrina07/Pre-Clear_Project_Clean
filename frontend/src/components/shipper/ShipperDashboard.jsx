@@ -330,11 +330,6 @@ export function ShipperDashboard({ onNavigate }) {
         <p className="text-slate-600 text-base opacity-80">Manage your shipments and track pre-clearance approvals</p>
       </div>
 
-      {/* Real-time Notifications */}
-      <div className="mb-6">
-        <NotificationPanel role="shipper" onNavigate={onNavigate} />
-      </div>
-
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white rounded-xl p-5 border border-slate-200 transition-all hover:shadow-lg cursor-pointer">

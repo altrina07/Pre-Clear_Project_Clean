@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 
 export function NotificationPanel({ role, onNavigate }) {
   const { notifications } = useNotifications(role);
+  console.log('[NotificationPanel] Received notifications for role:', role, notifications);
   const [viewedNotifications, setViewedNotifications] = useState(() => {
     // Load from localStorage on mount
     if (typeof window !== 'undefined') {
@@ -60,13 +61,16 @@ export function NotificationPanel({ role, onNavigate }) {
     setViewedNotifications(prev => new Set([...prev, notification.id]));
     shipmentsStore.markNotificationAsRead(notification.id);
     
-    if (role === 'broker' && notification.type === 'broker-approval-request') {
+    // Route based on notification type
+    if (notification.type === 'broker-approval-request') {
       const shipment = shipmentsStore.getShipmentById(notification.shipmentId);
       onNavigate('broker-review', shipment);
-    } else if (role === 'shipper' && notification.type === 'documents-requested') {
+    } else if (notification.type === 'documents-requested' || notification.type === 'document_request') {
+      // Document request notifications route to shipment details
       const shipment = shipmentsStore.getShipmentById(notification.shipmentId);
       onNavigate('shipment-details', shipment);
     } else if (notification.shipmentId) {
+      // Any other notification with a shipmentId routes to shipment details
       const shipment = shipmentsStore.getShipmentById(notification.shipmentId);
       onNavigate('shipment-details', shipment);
     }
@@ -97,6 +101,7 @@ export function NotificationPanel({ role, onNavigate }) {
       case 'broker-denied':
         return <XCircle className="w-5 h-5 text-red-600" />;
       case 'documents-requested':
+      case 'document_request':
         return <FileText className="w-5 h-5 text-amber-600" />;
       case 'chat-message':
         return <MessageCircle className="w-5 h-5 text-blue-600" />;
@@ -147,7 +152,7 @@ export function NotificationPanel({ role, onNavigate }) {
                 </div>
                 <p className="text-slate-600 text-xs mb-1">{notification.message}</p>
                 <p className="text-slate-500 text-xs">
-                  {new Date(notification.timestamp).toLocaleString()}
+                  {new Date(notification.createdAt || notification.timestamp).toLocaleString()}
                 </p>
               </div>
               <button

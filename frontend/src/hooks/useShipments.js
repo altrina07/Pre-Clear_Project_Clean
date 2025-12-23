@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { shipmentsStore } from '../store/shipmentsStore';
 import { getMyShipments, getShipmentById, pollShipmentStatus, brokerApprove as brokerApproveApi } from '../api/shipments';
-import { uploadShipmentDocument, markShipmentDocument } from '../api/documents';
+import { uploadShipmentDocument, markShipmentDocument, requestShipmentDocuments } from '../api/documents';
 import { getShipmentMessages, sendMessage as sendChatMessage } from '../components/api/chat';
 
 export function useShipments() {
@@ -327,14 +327,19 @@ export function useShipments() {
     },
     brokerRequestDocuments: async (id, docs, message) => {
       try {
-        // Include requested doc names in notes for audit trail on backend
-        const docNames = Array.isArray(docs) ? docs.map(d => d.name || d).join(', ') : '';
-        const notes = docNames ? `${message}\nRequested: ${docNames}` : message;
-        const updated = await brokerApproveApi(id, 'documents-requested', notes);
-        const mapped = mapBackendShipment(updated);
-        shipmentsStore.saveShipment(mapped);
-        return mapped;
+        const names = Array.isArray(docs) ? docs.map(d => d.name || d) : [];
+        console.log('[useShipments.brokerRequestDocuments] Calling API with:', { shipmentId: id, names, message });
+        const resp = await requestShipmentDocuments(id, names, message);
+        console.log('[useShipments.brokerRequestDocuments] API response:', resp);
+        const shipment = shipmentsStore.getShipmentById(id);
+        if (shipment) {
+          shipment.status = 'document-requested';
+          shipment.brokerApproval = 'documents-requested';
+          shipmentsStore.saveShipment(shipment);
+        }
+        return resp; // { success: true, request }
       } catch (e) {
+        console.error('[useShipments.brokerRequestDocuments] Error:', e);
         throw e;
       }
     },
@@ -437,6 +442,37 @@ export function useNotifications(role) {
   const [notifications, setNotifications] = useState(
     shipmentsStore.getNotifications(role)
   );
+
+  // Fetch notifications from backend API on mount and every 15 seconds
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const data = await fetchNotificationsApi();
+        console.log('[useNotifications] Fetched from API:', data);
+        if (Array.isArray(data)) {
+          // Clear old notifications and populate with fresh data from backend
+          shipmentsStore.clearNotifications();
+          
+          // Populate store with backend notifications
+          data.forEach(notif => {
+            console.log('[useNotifications] Adding notification:', notif);
+            shipmentsStore.addNotification(notif);
+          });
+          
+          const allNotifs = shipmentsStore.getNotifications(role);
+          setNotifications(allNotifs);
+          console.log('[useNotifications] Store now has', allNotifs.length, 'notifications:', allNotifs);
+        }
+      } catch (error) {
+        console.error('[useNotifications] Failed to fetch notifications:', error);
+      }
+    };
+
+    fetchNotifications(); // Initial fetch
+    const interval = setInterval(fetchNotifications, 15000); // Poll every 15s
+
+    return () => clearInterval(interval);
+  }, [role]);
 
   useEffect(() => {
     const unsubscribe = shipmentsStore.subscribe(() => {

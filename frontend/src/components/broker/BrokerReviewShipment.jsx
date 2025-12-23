@@ -35,7 +35,7 @@ const formatTimeWithAmPm = (timeString) => {
 };
 
 export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigate }) {
-  const { brokerApprove, brokerDeny } = useShipments();
+  const { brokerApprove, brokerDeny, brokerRequestDocuments } = useShipments();
   const [currentShipment, setCurrentShipment] = useState(initialShipment || {});
   const [shipmentLoaded, setShipmentLoaded] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -52,6 +52,13 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
   const [zoomLevel, setZoomLevel] = useState(100);
   const [s3Docs, setS3Docs] = useState([]);
   const [showAllDocs, setShowAllDocs] = useState(false);
+
+  // Auto-open chat panel if openChat parameter is present
+  useEffect(() => {
+    if (initialShipment?.openChat || currentShipment?.openChat) {
+      setChatOpen(true);
+    }
+  }, [initialShipment?.openChat, currentShipment?.openChat]);
 
   // Use shipper's currency if provided, otherwise derive from origin country (fallback to US)
   const currency = currentShipment?.currency 
@@ -208,13 +215,19 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
   // Request additional documents handler
   const handleRequestDocuments = async () => {
     const id = currentShipment?.id;
-    if (!id || requestedDocNames.length === 0 || !docRequestMessage) return;
+    if (!id || requestedDocNames.length === 0) return;
     const docs = requestedDocNames.map((name) => ({ name, type: name.toLowerCase().includes('invoice') ? 'invoice' : 'document' }));
     try {
-      await brokerRequestDocuments(id, docs, docRequestMessage);
-    } finally {
+      console.log('[BrokerReviewShipment] Sending request for shipmentId:', id, 'docs:', docs, 'message:', docRequestMessage);
+      await brokerRequestDocuments(id, docs, docRequestMessage || '');
+      console.log('[BrokerReviewShipment] Request succeeded');
       setShowDocRequestModal(false);
-      onNavigate?.('broker-dashboard');
+      setRequestedDocNames([]);
+      setDocRequestMessage('');
+      alert('Document request sent to shipper.');
+    } catch (e) {
+      console.error('[BrokerReviewShipment] Request failed:', e);
+      alert(`Failed to send document request: ${e?.message || 'Unknown error'}`);
     }
   };
 
@@ -261,6 +274,7 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
             <ShipmentDocumentsPanel
               shipmentId={currentShipment.id}
               allowUpload={false}
+              onPreview={(doc) => setViewingDocument(doc)}
             />
           )}
           
@@ -605,20 +619,20 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
 
       {/* Request Documents Modal */}
       {showDocRequestModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full p-6">
-            <h3 className="text-slate-900 mb-4">Request Additional Documents</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" aria-hidden="false">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6" role="dialog" aria-modal="true" aria-labelledby="requestDocumentsTitle">
+            <h3 id="requestDocumentsTitle" className="text-slate-900 mb-4">Request Additional Documents</h3>
             <div className="mb-4">
-              <label className="block text-slate-700 mb-2">Document Names (one per line)</label>
-              <textarea value={requestedDocNames.join('\n')} onChange={(e) => setRequestedDocNames(e.target.value.split('\n').filter(Boolean))} className="w-full p-3 border border-slate-300 rounded-lg h-32" placeholder="Safety Certificate\nTechnical Specifications\nISO Certification" />
+              <label htmlFor="requestedDocNames" className="block text-slate-700 mb-2">Document Names (one per line)</label>
+              <textarea id="requestedDocNames" aria-label="Requested document names" value={requestedDocNames.join('\n')} onChange={(e) => setRequestedDocNames(e.target.value.split('\n').filter(Boolean))} className="w-full p-3 border border-slate-300 rounded-lg h-32" placeholder="Safety Certificate\nTechnical Specifications\nISO Certification" />
             </div>
             <div className="mb-6">
-              <label className="block text-slate-700 mb-2">Message to Shipper</label>
-              <textarea value={docRequestMessage} onChange={(e) => setDocRequestMessage(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg h-24" placeholder="Please provide the following additional documents for customs clearance..." />
+              <label htmlFor="docRequestMessage" className="block text-slate-700 mb-2">Message to Shipper</label>
+              <textarea id="docRequestMessage" aria-label="Message to shipper" value={docRequestMessage} onChange={(e) => setDocRequestMessage(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg h-24" placeholder="Please provide the following additional documents for customs clearance..." />
             </div>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowDocRequestModal(false)} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg">Cancel</button>
-              <button onClick={handleRequestDocuments} disabled={requestedDocNames.length === 0 || !docRequestMessage} className="px-4 py-2 rounded-lg" style={{ background: '#2563EB', color: '#ffffff', border: '2px solid #1E40AF' }}>Send Request</button>
+              <button aria-label="Cancel document request" onClick={() => setShowDocRequestModal(false)} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg">Cancel</button>
+              <button aria-label="Send document request" onClick={handleRequestDocuments} disabled={requestedDocNames.length === 0} className="px-4 py-2 rounded-lg" style={{ background: '#2563EB', color: '#ffffff', border: '2px solid #1E40AF' }}>Send Request</button>
             </div>
           </div>
         </div>

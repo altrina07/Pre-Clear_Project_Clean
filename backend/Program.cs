@@ -80,6 +80,7 @@ builder.Services.AddScoped<PreClear.Api.Interfaces.IDocumentService, PreClear.Ap
 builder.Services.AddScoped<PreClear.Api.Interfaces.INotificationService, PreClear.Api.Services.NotificationService>();
 builder.Services.AddScoped<PreClear.Api.Interfaces.IS3StorageService, PreClear.Api.Services.S3StorageService>();
 builder.Services.AddScoped<PreClear.Api.Services.BrokerAssignmentService>(); // Add BrokerAssignmentService
+builder.Services.AddTransient<PreClear.Api.Interfaces.IEmailService, PreClear.Api.Services.EmailService>();
 builder.Services.AddHttpContextAccessor(); // Add IHttpContextAccessor for JWT claims extraction
 
 // Document Validation Services

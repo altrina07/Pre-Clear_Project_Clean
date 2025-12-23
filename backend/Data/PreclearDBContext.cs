@@ -18,6 +18,7 @@ namespace PreClear.Api.Data
         public DbSet<ShipmentProduct> ShipmentProducts { get; set; }
         public DbSet<ShipmentCompliance> ShipmentCompliance { get; set; }
         public DbSet<ShipmentDocument> ShipmentDocuments { get; set; }
+        public DbSet<DocumentRequest> DocumentRequests { get; set; }
         public DbSet<BrokerReview> BrokerReviews { get; set; }
         public DbSet<Notification> Notifications { get; set; }
         public DbSet<ShipmentMessage> ShipmentMessages { get; set; }
@@ -305,6 +306,26 @@ namespace PreClear.Api.Data
                 entity.HasOne(m => m.Sender).WithMany().HasForeignKey(m => m.SenderId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(m => m.ShipmentId).HasDatabaseName("idx_msgs_shipment");
                 entity.HasIndex(m => m.SenderId).HasDatabaseName("idx_msgs_sender");
+            });
+
+            // -------- document_requests
+            modelBuilder.Entity<DocumentRequest>(entity =>
+            {
+                entity.ToTable("document_requests");
+                entity.HasKey(dr => dr.Id);
+                entity.Property(dr => dr.Id).HasColumnName("id");
+                entity.Property(dr => dr.ShipmentId).HasColumnName("shipment_id").IsRequired();
+                entity.Property(dr => dr.RequestedByBrokerId).HasColumnName("requested_by_broker_id").IsRequired();
+                entity.Property(dr => dr.RequestedDocumentNames).HasColumnName("requested_document_names").HasColumnType("text").IsRequired();
+                entity.Property(dr => dr.RequestMessage).HasColumnName("request_message").HasColumnType("text");
+                entity.Property(dr => dr.Status).HasColumnName("status").HasMaxLength(50).IsRequired().HasDefaultValue("pending");
+                entity.Property(dr => dr.CreatedAt).HasColumnName("created_at").HasColumnType("datetime(3)").HasDefaultValueSql("CURRENT_TIMESTAMP(3)");
+                entity.Property(dr => dr.FulfilledAt).HasColumnName("fulfilled_at").HasColumnType("datetime(3)");
+
+                entity.HasOne(dr => dr.Shipment).WithMany().HasForeignKey(dr => dr.ShipmentId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(dr => dr.ShipmentId).HasDatabaseName("idx_docreq_shipment");
+                entity.HasIndex(dr => dr.RequestedByBrokerId).HasDatabaseName("idx_docreq_broker");
+                entity.HasIndex(dr => dr.Status).HasDatabaseName("idx_docreq_status");
             });
         }
     }

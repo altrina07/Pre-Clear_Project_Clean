@@ -894,7 +894,15 @@ class ShipmentsStore {
 
   // Notifications
   getNotifications(role) {
-    return this.notifications.filter(n => n.recipientRole === role);
+    // Return all notifications for current user
+    // Backend already filters by userId, so we don't filter by role here
+    // The role parameter is kept for backward compatibility but not used
+    return this.notifications;
+  }
+
+  clearNotifications() {
+    this.notifications = [];
+    this.notify();
   }
 
   addNotification(notification) {

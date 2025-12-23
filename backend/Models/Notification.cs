@@ -32,6 +32,10 @@ namespace PreClear.Api.Models
         [Column("shipment_id")]
         public long? ShipmentId { get; set; }
 
+        [Column("redirect_url")]
+        [MaxLength(500)]
+        public string? RedirectUrl { get; set; }
+
         [Column("is_read")]
         public bool IsRead { get; set; } = false;
 

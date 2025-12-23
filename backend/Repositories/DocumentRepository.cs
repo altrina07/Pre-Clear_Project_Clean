@@ -79,5 +79,21 @@ namespace PreClear.Api.Repositories
             await _db.SaveChangesAsync();
             return true;
         }
+
+        public async Task<DocumentRequest> CreateDocumentRequestAsync(DocumentRequest request)
+        {
+            _db.DocumentRequests.Add(request);
+            await _db.SaveChangesAsync();
+            return request;
+        }
+
+        public async Task<List<DocumentRequest>> GetDocumentRequestsByShipmentAsync(long shipmentId)
+        {
+            return await _db.DocumentRequests
+                .AsNoTracking()
+                .Where(r => r.ShipmentId == shipmentId)
+                .OrderByDescending(r => r.CreatedAt)
+                .ToListAsync();
+        }
     }
 }

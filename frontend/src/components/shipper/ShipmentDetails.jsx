@@ -207,6 +207,29 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
     return () => { if (intervalId) clearInterval(intervalId); };
   }, [currentShipment?.id, currentShipment?.AiApprovalStatus, currentShipment?.BrokerApprovalStatus, currentShipment?.status]);
 
+  // Fetch document requests from backend
+  useEffect(() => {
+    if (!currentShipment?.id) return;
+    
+    const fetchDocumentRequests = async () => {
+      try {
+        setLoadingDocumentRequests(true);
+        const requests = await listShipmentDocumentRequests(currentShipment.id);
+        setDocumentRequests(Array.isArray(requests) ? requests : []);
+      } catch (err) {
+        console.error('Failed to fetch document requests:', err);
+        setDocumentRequests([]);
+      } finally {
+        setLoadingDocumentRequests(false);
+      }
+    };
+
+    fetchDocumentRequests();
+    // Poll every 10 seconds for new document requests
+    const interval = setInterval(fetchDocumentRequests, 10000);
+    return () => clearInterval(interval);
+  }, [currentShipment?.id]);
+
   // aiProcessing effect moved below guard after aiApproval is defined
 
   // Required documents - use shipment.documents (populated by model) when available

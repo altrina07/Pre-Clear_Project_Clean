@@ -19,7 +19,19 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const inputRef = useRef(null);
   const { loadShipmentMessages, sendShipmentMessage } = useShipments();
+
+  // Auto-focus input and scroll to bottom when chat opens
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      // Delay to ensure DOM is ready
+      setTimeout(() => {
+        inputRef.current?.focus();
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !shipmentId) return undefined;
@@ -70,21 +82,8 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
         type: 'file'
       };
 
-      // Add chat message
-      shipmentsStore.addMessage(msg);
-
-      // Also persist uploaded document metadata on the shipment (for details view)
-      const shipment = shipmentsStore.getShipmentById(shipmentId) || {};
-      shipment.uploadedDocuments = shipment.uploadedDocuments || {};
-      // Use filename as key (demo). In real app use stable id or storage key.
-      const key = file.name.replace(/\s+/g, '_');
-      shipment.uploadedDocuments[key] = {
-        uploaded: true,
-        name: file.name,
-        uploadedAt: new Date().toISOString(),
-        fileType: file.type
-      };
-      shipmentsStore.saveShipment(shipment);
+      // Add chat message locally (file uploads are not posted to API yet)
+      setMessages(prev => [...prev, msg]);
 
       setIsUploading(false);
       // clear input
@@ -139,10 +138,11 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
           <p className="text-xs text-slate-500">Loading messages...</p>
         )}
         {messages.map(msg => {
-          const own = msg.sender === userRole;
+          const messageId = msg.id || msg.Id;
+          const own = msg.sender === userRole || msg.senderName === userName || msg.SenderName === userName;
 
           return (
-            <div key={msg.id} className={`flex ${own ? 'justify-end' : 'justify-start'}`}>
+            <div key={messageId} className={`flex ${own ? 'justify-end' : 'justify-start'}`}>
               <div className="max-w-xs">
                 <div
                   className="rounded-lg p-3"
@@ -168,7 +168,7 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
                   )}
                 </div>
                 <p className="text-xs mt-1 text-right" style={{ color: COLORS.coffeeLight }}>
-                  {new Date(msg.timestamp).toLocaleTimeString()}
+                  {new Date(msg.timestamp || msg.createdAt || msg.CreatedAt).toLocaleTimeString()}
                 </p>
               </div>
             </div>
@@ -196,6 +196,7 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
           </button>
 
           <input
+            ref={inputRef}
             value={newMessage}
             onChange={e => setNewMessage(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSendMessage()}

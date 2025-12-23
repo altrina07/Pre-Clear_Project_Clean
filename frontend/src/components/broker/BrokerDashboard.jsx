@@ -186,8 +186,6 @@ export function BrokerDashboard({ onNavigate }) {
         {/* notifications removed */}
       </div>
 
-      {/* notification panel removed from dashboard */}
-
       {/* Stats (kept as quick overview) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 px-0">
         <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">

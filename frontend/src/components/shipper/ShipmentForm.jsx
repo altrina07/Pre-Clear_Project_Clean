@@ -7,8 +7,9 @@ import { shipmentsStore } from '../../store/shipmentsStore';
 import { suggestHSCode, validateAndCheckHSCode, getCurrencyByCountry } from '../../utils/validation';
 import { HsSuggestionPanel } from './HsSuggestionPanel';
 import { createShipment, updateShipment } from '../../api/shipments';
-import { uploadShipmentDocument, markShipmentDocument } from '../../api/documents';
+import { markShipmentDocument } from '../../api/documents';
 import { getProfile } from '../../api/auth';
+import { uploadShipmentDocument } from '../../api/documents';
 
 const modes = ['Air', 'Sea', 'Road', 'Rail', 'Courier', 'Multimodal'];
 const shipmentTypes = ['Domestic', 'International'];
@@ -318,6 +319,8 @@ export function ShipmentForm({ shipment, onNavigate }) {
   const [documentUploadError, setDocumentUploadError] = useState('');
   const [analyzingDocuments, setAnalyzingDocuments] = useState(false);
   const [documentValidationError, setDocumentValidationError] = useState('');
+  const [uploadingDocuments, setUploadingDocuments] = useState({});
+  const [documentUploadErrors, setDocumentUploadErrors] = useState({});
   const [errors, setErrors] = useState({});
   const [pricing, setPricing] = useState({
     basePrice: 0,
@@ -1926,7 +1929,7 @@ export function ShipmentForm({ shipment, onNavigate }) {
                             )}
                             <input
                               type="file"
-                              accept=".pdf,.jpg,.jpeg,.png"
+                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx"
                               onChange={async (e) => {
                                 const file = e.target.files[0];
                                 if (file) {
@@ -1935,10 +1938,11 @@ export function ShipmentForm({ shipment, onNavigate }) {
                               }}
                               className="hidden"
                               id={`file-${idx}`}
+                              disabled={uploadingDocuments[doc.name]}
                             />
                             <label
                               htmlFor={`file-${idx}`}
-                              className="px-4 py-2 transition-colors cursor-pointer text-sm flex items-center gap-2 text-white font-medium"
+                              className={`px-4 py-2 transition-colors cursor-pointer text-sm flex items-center gap-2 text-white font-medium ${uploadingDocuments[doc.name] ? 'opacity-75 cursor-not-allowed' : ''}`}
                               style={{ ...yellowButtonStyle, outline: 'none', boxShadow: 'none' }}
                             >
                               <Upload className="w-4 h-4" style={{ color: '#2F1B17' }} />
@@ -1948,7 +1952,10 @@ export function ShipmentForm({ shipment, onNavigate }) {
                                   ? 'Change File'
                                   : 'Upload'}
                             </label>
-                            {(doc.uploaded || documentFiles[doc.name]) && (
+                            {documentUploadErrors[doc.name] && (
+                              <div className="text-xs text-red-700 ml-2">{documentUploadErrors[doc.name]}</div>
+                            )}
+                            {(doc.uploaded || documentFiles[doc.name]) && !documentUploadErrors[doc.name] && (
                               <span className="text-sm text-green-700 flex items-center gap-1">
                                 <CheckCircle2 className="w-4 h-4" />
                                 {documentFiles[doc.name] ? documentFiles[doc.name].name : 'Uploaded'}

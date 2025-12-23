@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PreClear.Api.Data;
 
@@ -10,9 +11,11 @@ using PreClear.Api.Data;
 namespace backend.Migrations
 {
     [DbContext(typeof(PreclearDbContext))]
-    partial class PreclearDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251221112706_AddDocumentRequests")]
+    partial class AddDocumentRequests
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -147,6 +150,7 @@ namespace backend.Migrations
                         .HasColumnName("fulfilled_at");
 
                     b.Property<string>("RequestMessage")
+                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("request_message");
 
@@ -208,11 +212,6 @@ namespace backend.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("message");
-
-                    b.Property<string>("RedirectUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)")
-                        .HasColumnName("redirect_url");
 
                     b.Property<long?>("ShipmentId")
                         .HasColumnType("bigint")
@@ -293,48 +292,16 @@ namespace backend.Migrations
                         .HasColumnType("decimal(18,2)")
                         .HasColumnName("customs_value");
 
-                    b.Property<DateTime?>("EstimatedDropoffDate")
-                        .HasColumnType("datetime(3)")
-                        .HasColumnName("estimated_dropoff_date");
-
                     b.Property<string>("Mode")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)")
                         .HasColumnName("mode");
 
-                    b.Property<DateTime?>("PickupDate")
-                        .HasColumnType("datetime(3)")
-                        .HasColumnName("pickup_date");
-
-                    b.Property<string>("PickupLocation")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)")
-                        .HasColumnName("pickup_location");
-
-                    b.Property<string>("PickupTimeEarliest")
-                        .HasMaxLength(10)
-                        .HasColumnType("varchar(10)")
-                        .HasColumnName("pickup_time_earliest");
-
-                    b.Property<string>("PickupTimeLatest")
-                        .HasMaxLength(10)
-                        .HasColumnType("varchar(10)")
-                        .HasColumnName("pickup_time_latest");
-
-                    b.Property<string>("PickupType")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("pickup_type");
-
                     b.Property<string>("PreclearToken")
                         .HasMaxLength(150)
                         .HasColumnType("varchar(150)")
                         .HasColumnName("preclear_token");
-
-                    b.Property<decimal?>("PricingTotal")
-                        .HasColumnType("decimal(65,30)")
-                        .HasColumnName("pricing_total");
 
                     b.Property<string>("ReferenceId")
                         .IsRequired()

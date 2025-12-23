@@ -21,6 +21,7 @@ import {
   Bell
 } from 'lucide-react';
 import { useState } from 'react';
+import { NotificationBell } from './NotificationBell';
 import { NotificationPanel } from './NotificationPanel';
 
 export function Layout({ children, userRole, currentPage, onNavigate, onLogout, userInfo }) {
@@ -74,7 +75,6 @@ export function Layout({ children, userRole, currentPage, onNavigate, onLogout, 
   const roleColor = getRoleColor();
 
   const isFixedSidebar = isAdmin || userRole === 'broker' || userRole === 'shipper';
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   // Unified sidebar color: keep same for shipper, broker and admin
   const SIDEBAR_BG = '#2F1B17';
@@ -172,15 +172,7 @@ export function Layout({ children, userRole, currentPage, onNavigate, onLogout, 
                 </p>
               </div>
               <div>
-                {!isAdmin && (
-                  <button
-                    aria-label="Notifications"
-                    className="p-2 rounded"
-                    onClick={(e) => { e.stopPropagation(); setNotificationsOpen(open => !open); }}
-                  >
-                    <Bell className="w-4 h-4" style={isFixedSidebar ? { color: '#FBF9F6' } : undefined} />
-                  </button>
-                )}
+                {!isAdmin && <NotificationBell />}
               </div>
             </div>
           </div>
@@ -194,13 +186,6 @@ export function Layout({ children, userRole, currentPage, onNavigate, onLogout, 
           </button>
         </div>
       </aside>
-
-      {/* Notifications popover for broker */}
-      {notificationsOpen && userRole === 'broker' && (
-        <div style={{ position: 'fixed', top: 80, left: 288, zIndex: 60 }}>
-          <NotificationPanel role="broker" fullList={true} onNavigate={(page, payload) => { setNotificationsOpen(false); onNavigate(page, payload); }} />
-        </div>
-      )}
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto" style={isFixedSidebar ? { marginLeft: '288px' } : undefined}>

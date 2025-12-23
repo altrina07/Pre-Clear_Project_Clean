@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import useRequiredDocuments from '../hooks/useRequiredDocuments';
+import { uploadShipmentDocument } from '../api/documents';
 
 /**
  * RequiredDocuments Component
@@ -18,6 +19,8 @@ const RequiredDocuments = ({
   // State for file uploads
   const [uploadedFiles, setUploadedFiles] = useState({});
   const [expandedDocs, setExpandedDocs] = useState(new Set());
+  const [uploadingDocs, setUploadingDocs] = useState({});
+  const [uploadErrors, setUploadErrors] = useState({});
 
   // Fetch predictions
   const { documents, loading, error, metadata, refresh } = useRequiredDocuments(
@@ -36,26 +39,46 @@ const RequiredDocuments = ({
   /**
    * Handle file selection for a document
    */
-  const handleFileSelect = (documentName, event) => {
+  const handleFileSelect = async (documentName, event) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setUploadedFiles((prev) => ({
-        ...prev,
-        [documentName]: {
-          name: file.name,
-          file,
-          uploadedAt: new Date().toISOString(),
-        },
-      }));
+    if (!file) return;
 
-      // Notify parent component
-      if (onDocumentChange) {
-        onDocumentChange({
-          documentName,
-          fileName: file.name,
-          file,
-          action: 'uploaded',
-        });
+    // Store file locally for immediate UI feedback
+    setUploadedFiles((prev) => ({
+      ...prev,
+      [documentName]: {
+        name: file.name,
+        file,
+        uploadedAt: new Date().toISOString(),
+      },
+    }));
+
+    // Notify parent component
+    if (onDocumentChange) {
+      onDocumentChange({
+        documentName,
+        fileName: file.name,
+        file,
+        action: 'uploaded',
+      });
+    }
+
+    // If shipmentData has an ID, upload to backend S3
+    if (shipmentData?.id) {
+      setUploadingDocs((prev) => ({ ...prev, [documentName]: true }));
+      setUploadErrors((prev) => ({ ...prev, [documentName]: null }));
+
+      try {
+        await uploadShipmentDocument(shipmentData.id, file, documentName);
+        console.log(`[RequiredDocuments] Successfully uploaded ${documentName} to S3`);
+      } catch (err) {
+        console.error(`[RequiredDocuments] Failed to upload ${documentName}:`, err);
+        setUploadErrors((prev) => ({
+          ...prev,
+          [documentName]: err.message || 'Upload failed',
+        }));
+      } finally {
+        setUploadingDocs((prev) => ({ ...prev, [documentName]: false }));
       }
     }
   };
@@ -266,36 +289,55 @@ const RequiredDocuments = ({
                 {/* File Upload Section */}
                 <div className="px-4 pb-4 border-t border-gray-100">
                   {!isUploaded ? (
-                    <label className="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
-                      <input
-                        type="file"
-                        onChange={(e) => handleFileSelect(doc.name, e)}
-                        className="hidden"
-                        accept=".pdf,.doc,.docx,.xlsx,.csv,.jpg,.jpeg,.png,.gif"
-                      />
-                      <div className="text-center">
-                        <svg
-                          className="mx-auto h-6 w-6 text-gray-400"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 4v16m8-8H4"
-                          />
-                        </svg>
-                        <p className="mt-2 text-sm text-gray-700">
-                          <span className="font-semibold">Click to upload</span> or drag and
-                          drop
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          PDF, Word, Excel, Images up to 10MB
-                        </p>
-                      </div>
-                    </label>
+                    <div>
+                      <label className="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                        <input
+                          type="file"
+                          onChange={(e) => handleFileSelect(doc.name, e)}
+                          className="hidden"
+                          accept=".pdf,.doc,.docx,.xlsx,.csv,.jpg,.jpeg,.png,.gif"
+                          disabled={uploadingDocs[doc.name]}
+                        />
+                        <div className="text-center">
+                          {uploadingDocs[doc.name] ? (
+                            <>
+                              <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-blue-400 border-t-blue-600 mb-2"></div>
+                              <p className="mt-2 text-sm text-gray-700">
+                                <span className="font-semibold">Uploading to S3...</span>
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <svg
+                                className="mx-auto h-6 w-6 text-gray-400"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 4v16m8-8H4"
+                                />
+                              </svg>
+                              <p className="mt-2 text-sm text-gray-700">
+                                <span className="font-semibold">Click to upload</span> or drag and
+                                drop
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                PDF, Word, Excel, Images up to 10MB
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </label>
+                      {uploadErrors[doc.name] && (
+                        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                          {uploadErrors[doc.name]}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -315,7 +357,7 @@ const RequiredDocuments = ({
                             {isUploaded.name}
                           </p>
                           <p className="text-xs text-green-700">
-                            Uploaded {new Date(isUploaded.uploadedAt).toLocaleDateString()}
+                            Uploaded to S3 {new Date(isUploaded.uploadedAt).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
