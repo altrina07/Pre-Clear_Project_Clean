@@ -24,6 +24,7 @@ import { getCurrencyByCountry, formatCurrency } from '../../utils/validation';
 import { ShipmentChatPanel } from '../ShipmentChatPanel';
 import { shipmentsStore } from '../../store/shipmentsStore';
 import { listShipmentDocuments, downloadShipmentDocument } from '../../api/documents';
+import ShipmentDocumentsPanel from '../shipper/ShipmentDocumentsPanel';
 
 // Helper function to format time to 12-hour format with AM/PM
 const formatTimeWithAmPm = (timeString) => {
@@ -397,33 +398,13 @@ export function ApprovedShipviewpg({ shipment: initialShipment = {}, onNavigate 
               </div>
 
               {/* Documents Section */}
-              <div>
-                <h3 className="text-slate-900 font-semibold mb-4">Documents</h3>
-                <div className="space-y-2">
-                  {(currentShipment.uploadedDocuments && Object.keys(currentShipment.uploadedDocuments).length > 0) ? (
-                    Object.entries(currentShipment.uploadedDocuments).map(([key, doc], idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <CheckCircle className="w-5 h-5 text-green-600" />
-                          <div>
-                            <p className="text-sm text-slate-900">{doc.name || key}</p>
-                            {doc.uploadedAt && <p className="text-xs text-slate-500">Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}</p>}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => setViewingDocument({ ...doc, shipmentId: currentShipment.id })}
-                          className="px-3 py-1 rounded-lg text-sm"
-                          style={{ background: '#2563EB', color: '#ffffff', border: '2px solid #1E40AF' }}
-                        >
-                          View
-                        </button>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">No documents uploaded</p>
-                  )}
-                </div>
-              </div>
+              {currentShipment?.id && (
+                <ShipmentDocumentsPanel
+                  shipmentId={currentShipment.id}
+                  allowUpload={false}
+                  onPreview={(doc) => setViewingDocument(doc)}
+                />
+              )}
             </div>
 
             {currentShipment.aiResults && currentShipment.aiResults.length > 0 && (

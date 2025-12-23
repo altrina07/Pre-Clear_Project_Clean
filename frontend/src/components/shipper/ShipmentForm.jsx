@@ -7,7 +7,7 @@ import { shipmentsStore } from '../../store/shipmentsStore';
 import { suggestHSCode, validateAndCheckHSCode, getCurrencyByCountry } from '../../utils/validation';
 import { HsSuggestionPanel } from './HsSuggestionPanel';
 import { createShipment, updateShipment } from '../../api/shipments';
-import { uploadShipmentDocument, markShipmentDocument } from '../../api/documents';
+import { markShipmentDocument } from '../../api/documents';
 import { getProfile } from '../../api/auth';
 import { uploadShipmentDocument } from '../../api/documents';
 
