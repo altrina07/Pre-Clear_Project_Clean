@@ -6,7 +6,8 @@ import {
   Zap, 
   X, 
   Loader,
-  AlertCircle
+  AlertCircle,
+  MessageCircle
 } from 'lucide-react';
 import { getNotifications, markAsRead, markAllAsRead } from '../../api/notifications';
 import { shipmentsStore } from '../../store/shipmentsStore';
@@ -67,6 +68,13 @@ export function ShipperNotifications({ onNavigate, currentUserId }) {
     const shipment = notification.shipmentId 
       ? shipmentsStore.getShipmentById(notification.shipmentId)
       : null;
+
+    // Chat message - navigate to shipment with chat open
+    if (notification.type === 'chat_message' || notification.type === 'new_message') {
+      console.log('[ShipperNotifications] Routing to shipment with chat panel open');
+      onNavigate('shipment-details', { ...shipment, openChat: true });
+      return;
+    }
 
     switch (notification.type) {
       case 'shipment-created':
@@ -129,6 +137,9 @@ export function ShipperNotifications({ onNavigate, currentUserId }) {
       case 'document_request':
       case 'documents-requested':
         return <FileText className="w-6 h-6 text-amber-600" />;
+      case 'chat_message':
+      case 'new_message':
+        return <MessageCircle className="w-6 h-6 text-indigo-600" />;
       default:
         return <Package className="w-6 h-6 text-slate-600" />;
     }
@@ -149,6 +160,9 @@ export function ShipperNotifications({ onNavigate, currentUserId }) {
       case 'document_request':
       case 'documents-requested':
         return 'Additional Documents Requested';
+      case 'chat_message':
+      case 'new_message':
+        return 'New Message';
       default:
         return notification.title || 'Notification';
     }
@@ -169,6 +183,9 @@ export function ShipperNotifications({ onNavigate, currentUserId }) {
       case 'document_request':
       case 'documents-requested':
         return { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-900' };
+      case 'chat_message':
+      case 'new_message':
+        return { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-900' };
       default:
         return { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-900' };
     }

@@ -45,6 +45,13 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
   const [viewingDocument, setViewingDocument] = useState(null);
   const [showAllDocs, setShowAllDocs] = useState(false);
 
+  // Auto-open chat panel if openChat parameter is present
+  useEffect(() => {
+    if (initialShipment?.openChat || currentShipment?.openChat) {
+      setChatOpen(true);
+    }
+  }, [initialShipment?.openChat, currentShipment?.openChat]);
+
   // Use shipper's currency if provided, otherwise derive from origin country (fallback to US)
   const currency = currentShipment?.currency 
     ? { code: currentShipment.currency, symbol: getCurrencyByCountry(currentShipment.originCountry || 'US').symbol }

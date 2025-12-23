@@ -20,6 +20,8 @@ namespace PreClear.Api.Services
 
         public async Task<Notification> CreateNotificationAsync(long userId, string type, string title, string message, long? shipmentId = null)
         {
+            var redirectUrl = BuildRedirectUrl(type, shipmentId);
+
             var notification = new Notification
             {
                 UserId = userId,
@@ -27,6 +29,7 @@ namespace PreClear.Api.Services
                 Title = title,
                 Message = message,
                 ShipmentId = shipmentId,
+                RedirectUrl = redirectUrl,
                 IsRead = false,
                 CreatedAt = DateTime.UtcNow
             };
@@ -38,6 +41,23 @@ namespace PreClear.Api.Services
             await SendEmailIfPossible(userId, title, message);
 
             return notification;
+        }
+
+        private string? BuildRedirectUrl(string type, long? shipmentId)
+        {
+            if (!shipmentId.HasValue)
+                return null;
+
+            return type switch
+            {
+                "chat_message" or "new_message" => $"/shipments/{shipmentId}/chat",
+                "document_request" or "documents-requested" => $"/shipments/{shipmentId}/documents",
+                "broker-approval-request" or "shipment-created" or "ai-completed" => $"/shipments/{shipmentId}",
+                "broker-approved" or "broker-denied" => $"/shipments/{shipmentId}",
+                "token_generated" or "token-generated" => $"/shipments/{shipmentId}",
+                "documents-uploaded" or "document_request_fulfilled" => $"/shipments/{shipmentId}",
+                _ => $"/shipments/{shipmentId}"
+            };
         }
 
         public async Task<List<Notification>> GetUserNotificationsAsync(long userId, bool? isRead = null)

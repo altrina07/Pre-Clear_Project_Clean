@@ -19,7 +19,19 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const inputRef = useRef(null);
   const { loadShipmentMessages, sendShipmentMessage } = useShipments();
+
+  // Auto-focus input and scroll to bottom when chat opens
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      // Delay to ensure DOM is ready
+      setTimeout(() => {
+        inputRef.current?.focus();
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !shipmentId) return undefined;
@@ -184,6 +196,7 @@ export function ShipmentChatPanel({ shipmentId, isOpen, onClose, userRole, userN
           </button>
 
           <input
+            ref={inputRef}
             value={newMessage}
             onChange={e => setNewMessage(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSendMessage()}

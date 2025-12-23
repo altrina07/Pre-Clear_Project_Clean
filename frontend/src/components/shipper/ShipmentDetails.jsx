@@ -68,6 +68,13 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
   const [documentRequests, setDocumentRequests] = useState([]);
   const [loadingDocumentRequests, setLoadingDocumentRequests] = useState(false);
   
+  // Auto-open chat panel if openChat parameter is present
+  useEffect(() => {
+    if (shipment?.openChat || currentShipment?.openChat) {
+      setChatOpen(true);
+    }
+  }, [shipment?.openChat, currentShipment?.openChat]);
+  
   // Initialize from props and set loading state
   // Sync loading/error overrides from parent route
   useEffect(() => {

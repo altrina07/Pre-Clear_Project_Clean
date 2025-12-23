@@ -8,7 +8,8 @@ import {
   FileText, 
   Zap, 
   Loader,
-  ArrowLeft
+  ArrowLeft,
+  MessageCircle
 } from 'lucide-react';
 import { getNotifications, markAsRead, markAllAsRead } from '../api/notifications';
 import { useNavigate } from 'react-router-dom';
@@ -57,13 +58,34 @@ export function NotificationsPage({ userRole }) {
     const shipmentId = notification.shipmentId || notification.ShipmentId;
     const role = userRole || localStorage.getItem('pc_role') || 'shipper';
 
+    // Chat message notifications - open shipment with chat panel
+    if (notification.type === 'chat_message' || notification.type === 'new_message') {
+      if (role === 'shipper') {
+        navigate(`/shipper/shipments/${shipmentId}?openChat=true`);
+      } else if (role === 'broker') {
+        navigate(`/broker/review/${shipmentId}?openChat=true`);
+      }
+      return;
+    }
+
+    // Document request notifications
+    if (notification.type === 'document_request' || 
+        notification.type === 'documents-requested') {
+      navigate(`/shipper/shipments/${shipmentId}`);
+      return;
+    }
+
+    // Broker-specific notifications
     if (notification.type === 'broker-approval-request' || 
+        notification.type === 'ai-completed' ||
+        notification.type === 'documents-uploaded' ||
         (role === 'broker' && shipmentId)) {
       navigate(`/broker/review/${shipmentId}`);
-    } else if (notification.type === 'document_request' || 
-               notification.type === 'documents-requested') {
-      navigate(`/shipper/shipments/${shipmentId}`);
-    } else if (shipmentId) {
+      return;
+    }
+
+    // Default routing by role
+    if (shipmentId) {
       if (role === 'shipper') {
         navigate(`/shipper/shipments/${shipmentId}`);
       } else if (role === 'broker') {
@@ -103,6 +125,9 @@ export function NotificationsPage({ userRole }) {
         return <FileText className="w-6 h-6 text-amber-600" />;
       case 'ai-completed':
         return <CheckCircle className="w-6 h-6 text-purple-600" />;
+      case 'chat_message':
+      case 'new_message':
+        return <MessageCircle className="w-6 h-6 text-indigo-600" />;
       default:
         return <Bell className="w-6 h-6 text-slate-600" />;
     }
@@ -125,6 +150,9 @@ export function NotificationsPage({ userRole }) {
         return { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-900' };
       case 'ai-completed':
         return { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-900' };
+      case 'chat_message':
+      case 'new_message':
+        return { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-900' };
       default:
         return { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-900' };
     }

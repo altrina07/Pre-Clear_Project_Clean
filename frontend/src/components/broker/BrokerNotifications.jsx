@@ -6,7 +6,8 @@ import {
   Zap, 
   X, 
   Loader,
-  AlertCircle
+  AlertCircle,
+  MessageCircle
 } from 'lucide-react';
 import { getNotifications, markAsRead, markAllAsRead } from '../../api/notifications';
 import { shipmentsStore } from '../../store/shipmentsStore';
@@ -68,6 +69,13 @@ export function BrokerNotifications({ onNavigate, currentUserId }) {
       ? shipmentsStore.getShipmentById(notification.shipmentId)
       : null;
 
+    // Chat message - navigate to broker review with chat open
+    if (notification.type === 'chat_message' || notification.type === 'new_message') {
+      console.log('[BrokerNotifications] Routing to broker review with chat panel open');
+      onNavigate('broker-review', { ...shipment, openChat: true });
+      return;
+    }
+
     switch (notification.type) {
       case 'broker-approval-request':
         console.log('[BrokerNotifications] Routing to broker review');
@@ -120,6 +128,9 @@ export function BrokerNotifications({ onNavigate, currentUserId }) {
       case 'document_request_fulfilled':
       case 'documents-uploaded':
         return <FileText className="w-6 h-6 text-amber-600" />;
+      case 'chat_message':
+      case 'new_message':
+        return <MessageCircle className="w-6 h-6 text-indigo-600" />;
       default:
         return <Package className="w-6 h-6 text-slate-600" />;
     }
@@ -138,6 +149,9 @@ export function BrokerNotifications({ onNavigate, currentUserId }) {
         return 'Requested Documents Received';
       case 'documents-uploaded':
         return 'Shipment Documents Uploaded';
+      case 'chat_message':
+      case 'new_message':
+        return 'New Message';
       default:
         return notification.title || 'Notification';
     }
@@ -155,6 +169,9 @@ export function BrokerNotifications({ onNavigate, currentUserId }) {
       case 'document_request_fulfilled':
       case 'documents-uploaded':
         return { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-900' };
+      case 'chat_message':
+      case 'new_message':
+        return { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-900' };
       default:
         return { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-900' };
     }
