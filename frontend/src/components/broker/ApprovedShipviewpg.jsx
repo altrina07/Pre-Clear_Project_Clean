@@ -14,12 +14,17 @@ import {
   Eye,
   MapPin,
   Phone,
-  Mail
+  Mail,
+  Loader,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import { useShipments } from '../../hooks/useShipments';
 import { getCurrencyByCountry, formatCurrency } from '../../utils/validation';
 import { ShipmentChatPanel } from '../ShipmentChatPanel';
 import { shipmentsStore } from '../../store/shipmentsStore';
+import { listShipmentDocuments, downloadShipmentDocument } from '../../api/documents';
+import ShipmentDocumentsPanel from '../shipper/ShipmentDocumentsPanel';
 
 // Helper function to format time to 12-hour format with AM/PM
 const formatTimeWithAmPm = (timeString) => {
@@ -43,6 +48,10 @@ export function ApprovedShipviewpg({ shipment: initialShipment = {}, onNavigate 
     const [requestedDocNames, setRequestedDocNames] = useState([]);
     const [viewingDocument, setViewingDocument] = useState(null);
     const [showAllDocs, setShowAllDocs] = useState(false);
+    const [viewerUrl, setViewerUrl] = useState(null);
+    const [loadingDocPreview, setLoadingDocPreview] = useState(false);
+    const [zoomLevel, setZoomLevel] = useState(100);
+    const [s3Docs, setS3Docs] = useState([]);
 
     const currencyCode = currentShipment?.currency || 'USD';
     const currencySymbol = { 
@@ -67,6 +76,71 @@ export function ApprovedShipviewpg({ shipment: initialShipment = {}, onNavigate 
 
       return () => unsubscribe();
     }, [initialShipment?.id, currentShipment?.id]);
+
+    // Load S3 documents for preview mapping
+    useEffect(() => {
+      if (!currentShipment?.id) {
+        setS3Docs([]);
+        return;
+      }
+
+      (async () => {
+        try {
+          const docs = await listShipmentDocuments(currentShipment.id);
+          setS3Docs(Array.isArray(docs) ? docs : []);
+        } catch (e) {
+          console.warn('[ApprovedShipviewpg] Failed to list shipment documents:', e);
+          setS3Docs([]);
+        }
+      })();
+    }, [currentShipment?.id]);
+
+    // Resolve and preview selected document with zoom controls
+    useEffect(() => {
+      let cancelled = false;
+      let objectUrl = null;
+
+      const resolveAndLoad = async () => {
+        if (!viewingDocument || !currentShipment?.id) return;
+        setLoadingDocPreview(true);
+        setViewerUrl(null);
+
+        try {
+          const match = (() => {
+            if (!Array.isArray(s3Docs) || s3Docs.length === 0) return null;
+            if (viewingDocument.id) return s3Docs.find((d) => d.id === viewingDocument.id) || null;
+            if (viewingDocument.fileName) return s3Docs.find((d) => d.fileName === viewingDocument.fileName) || null;
+            if (viewingDocument.name) return s3Docs.find((d) => d.fileName === viewingDocument.name || d.documentType === viewingDocument.name) || null;
+            if (viewingDocument.documentType) return s3Docs.find((d) => d.documentType === viewingDocument.documentType) || null;
+            return null;
+          })();
+
+          if (!match?.id) {
+            console.warn('[ApprovedShipviewpg] Could not find S3 doc for viewing:', viewingDocument);
+            setLoadingDocPreview(false);
+            return;
+          }
+
+          const { blob } = await downloadShipmentDocument(match.id);
+          if (cancelled) return;
+
+          objectUrl = URL.createObjectURL(blob);
+          setViewerUrl(objectUrl);
+        } catch (e) {
+          console.warn('[ApprovedShipviewpg] Failed to load document preview:', e);
+          if (!cancelled) setViewerUrl(null);
+        } finally {
+          if (!cancelled) setLoadingDocPreview(false);
+        }
+      };
+
+      resolveAndLoad();
+
+      return () => {
+        cancelled = true;
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      };
+    }, [viewingDocument, currentShipment?.id, s3Docs]);
 
     const handleApprove = () => {
       const id = currentShipment?.id;
@@ -324,33 +398,13 @@ export function ApprovedShipviewpg({ shipment: initialShipment = {}, onNavigate 
               </div>
 
               {/* Documents Section */}
-              <div>
-                <h3 className="text-slate-900 font-semibold mb-4">Documents</h3>
-                <div className="space-y-2">
-                  {(currentShipment.uploadedDocuments && Object.keys(currentShipment.uploadedDocuments).length > 0) ? (
-                    Object.entries(currentShipment.uploadedDocuments).map(([key, doc], idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <CheckCircle className="w-5 h-5 text-green-600" />
-                          <div>
-                            <p className="text-sm text-slate-900">{doc.name || key}</p>
-                            {doc.uploadedAt && <p className="text-xs text-slate-500">Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}</p>}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => setViewingDocument({ ...doc, shipmentId: currentShipment.id })}
-                          className="px-3 py-1 rounded-lg text-sm"
-                          style={{ background: '#2563EB', color: '#ffffff', border: '2px solid #1E40AF' }}
-                        >
-                          View
-                        </button>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">No documents uploaded</p>
-                  )}
-                </div>
-              </div>
+              {currentShipment?.id && (
+                <ShipmentDocumentsPanel
+                  shipmentId={currentShipment.id}
+                  allowUpload={false}
+                  onPreview={(doc) => setViewingDocument(doc)}
+                />
+              )}
             </div>
 
             {currentShipment.aiResults && currentShipment.aiResults.length > 0 && (
@@ -430,14 +484,97 @@ export function ApprovedShipviewpg({ shipment: initialShipment = {}, onNavigate 
 
         {viewingDocument && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl max-w-lg w-full p-6">
+            <div className="bg-white rounded-xl max-w-4xl w-full p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-slate-900">{viewingDocument.name}</h3>
-                <button onClick={() => setViewingDocument(null)} className="text-slate-500">Close</button>
+                <div>
+                  <h3 className="text-slate-900 text-lg font-semibold">{viewingDocument.name || viewingDocument.fileName || 'Document Preview'}</h3>
+                  {viewingDocument.documentType && <p className="text-slate-500 text-sm">{viewingDocument.documentType}</p>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setZoomLevel(Math.max(50, zoomLevel - 10))}
+                    disabled={loadingDocPreview}
+                    className="p-2 hover:bg-slate-100 rounded-lg disabled:opacity-50"
+                    title="Zoom out"
+                  >
+                    <ZoomOut className="w-4 h-4 text-slate-700" />
+                  </button>
+                  <span className="text-sm text-slate-600 min-w-12 text-center">{zoomLevel}%</span>
+                  <button
+                    onClick={() => setZoomLevel(Math.min(200, zoomLevel + 10))}
+                    disabled={loadingDocPreview}
+                    className="p-2 hover:bg-slate-100 rounded-lg disabled:opacity-50"
+                    title="Zoom in"
+                  >
+                    <ZoomIn className="w-4 h-4 text-slate-700" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setViewingDocument(null);
+                      setZoomLevel(100);
+                    }}
+                    className="text-slate-500 hover:text-slate-700 text-2xl ml-2"
+                    title="Close preview"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
-              <p className="text-slate-600 text-sm mb-4">Preview not available in demo. You can download the file below.</p>
-              <div className="flex justify-end">
-                <a href="#" onClick={(e) => { e.preventDefault(); alert(`Downloading ${viewingDocument.name} for shipment ${viewingDocument.shipmentId}`); }} className="px-4 py-2 rounded-lg" style={{ background: '#2563EB', color: '#ffffff', border: '2px solid #1E40AF' }}>Download</a>
+
+              <div className="bg-slate-50 rounded-lg overflow-auto" style={{ height: '75vh' }}>
+                {loadingDocPreview && (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center text-slate-600">
+                      <Loader className="w-6 h-6 animate-spin mx-auto mb-2" />
+                      <p>Loading preview...</p>
+                    </div>
+                  </div>
+                )}
+
+                {!loadingDocPreview && !viewerUrl && (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-slate-600 text-sm">Preview not available. Please download the document.</p>
+                  </div>
+                )}
+
+                {!loadingDocPreview && viewerUrl && (
+                  <div className="flex items-start justify-center p-4">
+                    <div
+                      style={{
+                        transform: `scale(${zoomLevel / 100})`,
+                        transformOrigin: 'top center',
+                        transition: 'transform 0.2s'
+                      }}
+                    >
+                      <iframe
+                        src={viewerUrl}
+                        className="rounded border border-slate-200 bg-white"
+                        style={{ width: '700px', height: '900px' }}
+                        title="Document Preview"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    if (viewerUrl) window.open(viewerUrl, '_blank');
+                  }}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+                >
+                  Open in new tab
+                </button>
+                <button
+                  onClick={() => {
+                    setViewingDocument(null);
+                    setZoomLevel(100);
+                  }}
+                  className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>
