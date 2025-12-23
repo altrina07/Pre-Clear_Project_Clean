@@ -6,6 +6,12 @@ using Microsoft.Extensions.Options;
 using PreClear.Api.Data;
 using PreClear.Api.Swagger;
 using PreClear.Api.Models;
+using Amazon.Textract;
+using Amazon.BedrockRuntime;
+using PreClear.Api.AI.Services.DocumentValidator;
+using PreClear.Api.Interfaces;
+using PreClear.Api.Services;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -76,10 +82,17 @@ builder.Services.AddScoped<PreClear.Api.Interfaces.IS3StorageService, PreClear.A
 builder.Services.AddScoped<PreClear.Api.Services.BrokerAssignmentService>(); // Add BrokerAssignmentService
 builder.Services.AddHttpContextAccessor(); // Add IHttpContextAccessor for JWT claims extraction
 
+// Document Validation Services
+builder.Services.AddScoped<ComplianceDatasetLoader>();
+builder.Services.AddScoped<DocumentExtractor>();
+builder.Services.AddScoped<DocumentValidator>();
+builder.Services.AddScoped<IDocumentValidationService, DocumentValidationService>();
+builder.Services.AddScoped<IAiDocumentAnalyzer, AiDocumentAnalyzerBedrock>();
+
 // AWS S3 Configuration
 // AWS S3 Configuration - prefer user-secrets under "AWSS3" but fall back to "AwsS3Settings"
 builder.Services.Configure<AwsS3Settings>(builder.Configuration.GetSection("AwsS3Settings"));
-builder.Services.AddSingleton<IAmazonS3>(sp =>
+builder.Services.AddSingleton(typeof(IAmazonS3), sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
     var s3Settings = sp.GetService<IOptions<AwsS3Settings>>()?.Value ?? new AwsS3Settings();
@@ -98,6 +111,38 @@ builder.Services.AddSingleton<IAmazonS3>(sp =>
         secretKey,
         Amazon.RegionEndpoint.GetBySystemName(region)
     );
+});
+
+// AWS Textract Configuration
+builder.Services.AddSingleton(typeof(IAmazonTextract), sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var s3Settings = sp.GetService<IOptions<AwsS3Settings>>()?.Value ?? new AwsS3Settings();
+
+    var accessKey = config["AWSS3:AccessKey"] ?? config["AwsS3Settings:AccessKey"] ?? s3Settings.AccessKey;
+    var secretKey = config["AWSS3:SecretKey"] ?? config["AwsS3Settings:SecretKey"] ?? s3Settings.SecretKey;
+    var region = config["AWS:Region"] ?? config["AwsS3Settings:Region"] ?? s3Settings.Region ?? "us-east-1";
+
+    if (string.IsNullOrWhiteSpace(accessKey) || string.IsNullOrWhiteSpace(secretKey))
+    {
+        throw new InvalidOperationException("AWS Textract credentials are not configured. Set them in user secrets (AWSS3:AccessKey / AWSS3:SecretKey) or in configuration (AwsS3Settings).");
+    }
+
+    return new AmazonTextractClient(
+        accessKey,
+        secretKey,
+        Amazon.RegionEndpoint.GetBySystemName(region)
+    );
+});
+
+// AWS Bedrock Runtime Configuration
+builder.Services.Configure<BedrockSettings>(builder.Configuration.GetSection("Bedrock"));
+builder.Services.AddSingleton(typeof(IAmazonBedrockRuntime), sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var bedrock = sp.GetService<IOptions<BedrockSettings>>()?.Value ?? new BedrockSettings();
+    var region = bedrock.Region ?? config["AWS:Region"] ?? "us-east-1";
+    return new AmazonBedrockRuntimeClient(Amazon.RegionEndpoint.GetBySystemName(region));
 });
 
 // Connection
@@ -189,6 +234,55 @@ catch (Exception ex)
     Console.WriteLine($"Critical error during application startup: {ex.Message}");
     Console.WriteLine($"Stack trace: {ex.StackTrace}");
     // Don't rethrow - continue running
+}
+
+// Initialize compliance dataset and verify Bedrock on startup
+try
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        var services = scope.ServiceProvider;
+        var logger = services.GetRequiredService<ILogger<Program>>();
+
+        try
+        {
+            var validationService = services.GetRequiredService<IDocumentValidationService>();
+            var datasetPath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "AI", "services", "document_validator", "datasets",
+                "cross_border_shipping_restrictions.csv"
+            );
+
+            await validationService.InitializeComplianceDatasetAsync(datasetPath);
+            logger.LogInformation("Compliance dataset initialized successfully");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error initializing compliance dataset");
+            // Continue startup even if dataset fails to load
+        }
+
+        // Verify Bedrock is configured
+        try
+        {
+            var bedrockSettings = services.GetRequiredService<IOptions<BedrockSettings>>()?.Value;
+            var bedrockClient = services.GetRequiredService<IAmazonBedrockRuntime>();
+            if (bedrockSettings?.ModelId != null && bedrockClient != null)
+            {
+                logger.LogInformation("✓ AWS Bedrock configured: Region={Region}, Model={Model}", 
+                    bedrockSettings.Region ?? "us-east-1", 
+                    bedrockSettings.ModelId);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "⚠ Bedrock configuration check failed - ensure AWS credentials are set");
+        }
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Error during startup initialization: {ex.Message}");
 }
 
 // Enable Swagger UI for all environments (local development and testing)

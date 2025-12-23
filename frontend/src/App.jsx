@@ -169,7 +169,7 @@ function AppShell() {
       case "create-shipment":
         return (
           <ShipmentForm
-            shipment={createDefaultShipment()}
+            shipment={null}
             onNavigate={handleNavigate}
           />
         );

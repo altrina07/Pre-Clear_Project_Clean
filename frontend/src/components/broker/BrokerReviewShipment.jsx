@@ -12,10 +12,14 @@ import {
   Upload,
   Shield,
   TrendingUp,
-  Eye
+  Eye,
+  Loader,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import { useShipments } from '../../hooks/useShipments';
 import { getShipmentById } from '../../api/shipments';
+import { listShipmentDocuments, downloadShipmentDocument } from '../../api/documents';
 import { getCurrencyByCountry, formatCurrency } from '../../utils/validation';
 import { ShipmentChatPanel } from '../ShipmentChatPanel';
 import { shipmentsStore } from '../../store/shipmentsStore';
@@ -43,6 +47,10 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
   const [docRequestMessage, setDocRequestMessage] = useState('');
   const [requestedDocNames, setRequestedDocNames] = useState([]);
   const [viewingDocument, setViewingDocument] = useState(null);
+  const [viewerUrl, setViewerUrl] = useState(null);
+  const [loadingDocPreview, setLoadingDocPreview] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [s3Docs, setS3Docs] = useState([]);
   const [showAllDocs, setShowAllDocs] = useState(false);
 
   // Use shipper's currency if provided, otherwise derive from origin country (fallback to US)
@@ -102,6 +110,76 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
       }
     })();
   }, [initialShipment?.id]);
+
+  // Load S3 documents for preview mapping
+  useEffect(() => {
+    if (!currentShipment?.id) {
+      setS3Docs([]);
+      return;
+    }
+
+    (async () => {
+      try {
+        const docs = await listShipmentDocuments(currentShipment.id);
+        setS3Docs(Array.isArray(docs) ? docs : []);
+      } catch (e) {
+        console.warn('[BrokerReviewShipment] Failed to list shipment documents:', e);
+        setS3Docs([]);
+      }
+    })();
+  }, [currentShipment?.id]);
+
+  // Resolve and preview selected document with zoom controls
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = null;
+
+    const resolveAndLoad = async () => {
+      if (!viewingDocument || !currentShipment?.id) return;
+      setLoadingDocPreview(true);
+      setViewerUrl(null);
+
+      try {
+        const match = (() => {
+          if (!Array.isArray(s3Docs) || s3Docs.length === 0) return null;
+          if (viewingDocument.id) return s3Docs.find((d) => d.id === viewingDocument.id) || null;
+          if (viewingDocument.fileName) return s3Docs.find((d) => d.fileName === viewingDocument.fileName) || null;
+          if (viewingDocument.name) return s3Docs.find((d) => d.fileName === viewingDocument.name || d.documentType === viewingDocument.name) || null;
+          if (viewingDocument.documentType) return s3Docs.find((d) => d.documentType === viewingDocument.documentType) || null;
+          return null;
+        })();
+
+        if (!match?.id) {
+          setLoadingDocPreview(false);
+          return;
+        }
+
+        const { blob } = await downloadShipmentDocument(match.id);
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) {
+          setViewerUrl(objectUrl);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          console.error('[BrokerReviewShipment] Failed to load document preview:', e);
+          setViewerUrl(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingDocPreview(false);
+        }
+      }
+    };
+
+    resolveAndLoad();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setViewerUrl(null);
+      setZoomLevel(100);
+    };
+  }, [viewingDocument, s3Docs, currentShipment?.id]);
 
   // Approve handler
   const handleApprove = async () => {
@@ -180,7 +258,10 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {currentShipment?.id && (
-            <ShipmentDocumentsPanel shipmentId={currentShipment.id} allowUpload={false} />
+            <ShipmentDocumentsPanel
+              shipmentId={currentShipment.id}
+              allowUpload={false}
+            />
           )}
           
           {/* Comprehensive Shipment Details */}
@@ -415,109 +496,7 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
             </div>
           )}
 
-          {/* Document Status */}
-          <div className="bg-white rounded-xl p-6 border border-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-slate-900">Document Status</h2>
-              <div>
-                <button onClick={() => setShowAllDocs(true)} className="text-sm px-3 py-1 rounded-lg" style={{ background: '#F3F4F6', border: '1px solid #E5E7EB' }}>View All Documents</button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {(currentShipment.documents || []).length > 0 ? (
-                (currentShipment.documents || []).map((doc, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      {doc.uploaded ? <CheckCircle className="w-5 h-5 text-green-600" /> : <XCircle className="w-5 h-5 text-red-600" />}
-                      <div>
-                        <p className="text-sm text-slate-900">{doc.name}</p>
-                        {doc.uploaded && doc.uploadedAt && <p className="text-xs text-slate-500">Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}</p>}
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                      {doc.uploaded ? (
-                        <button
-                          onClick={() => setViewingDocument({ ...doc, shipmentId: currentShipment.id })}
-                          className="px-3 py-1 rounded-lg text-sm"
-                          style={{ background: '#2563EB', color: '#ffffff', border: '2px solid #1E40AF' }}
-                        >
-                          View
-                        </button>
-                      ) : (
-                        <span className={`px-2 py-1 text-xs rounded-full ${doc.uploaded ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{doc.uploaded ? 'Uploaded' : 'Missing'}</span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-slate-500">No form documents uploaded yet</p>
-              )}
-
-              {/* Chat & Form Uploaded Documents Section */}
-              {currentShipment.uploadedDocuments && Object.keys(currentShipment.uploadedDocuments).length > 0 && (
-                <div className="mt-4 pt-4 border-t border-slate-200">
-                  {(() => {
-                    const formDocs = Object.entries(currentShipment.uploadedDocuments).filter(([_, doc]) => doc.source === 'form');
-                    const chatDocs = Object.entries(currentShipment.uploadedDocuments).filter(([_, doc]) => !doc.source || doc.source !== 'form');
-                    
-                    return (
-                      <>
-                        {/* Form Uploaded Documents */}
-                        {formDocs.length > 0 && (
-                          <div className="mb-4">
-                            <h3 className="text-slate-900 font-semibold text-sm mb-3">Documents from Shipment Form</h3>
-                            <div className="space-y-2">
-                              {formDocs.map(([key, doc]) => (
-                                <div key={key} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
-                                  <div className="flex items-center gap-3">
-                                    <CheckCircle className="w-5 h-5 text-green-600" />
-                                    <div>
-                                      <p className="text-sm text-slate-900">{doc.name || key}</p>
-                                      {doc.fileName && <p className="text-xs text-slate-500">File: {doc.fileName}</p>}
-                                      {doc.uploadedAt && <p className="text-xs text-slate-500">Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}</p>}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <button onClick={() => setViewingDocument({ ...doc, key, shipmentId: currentShipment.id })} className="px-3 py-1 rounded-lg text-sm" style={{ background: '#2563EB', color: '#ffffff', border: '2px solid #1E40AF' }}>View</button>
-                                    <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Form</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Chat Uploaded Documents */}
-                        {chatDocs.length > 0 && (
-                          <div>
-                            <h3 className="text-slate-900 font-semibold text-sm mb-3">Documents from Chat</h3>
-                            <div className="space-y-2">
-                              {chatDocs.map(([key, doc]) => (
-                                <div key={key} className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-200">
-                                  <div className="flex items-center gap-3">
-                                    <CheckCircle className="w-5 h-5 text-purple-600" />
-                                    <div>
-                                      <p className="text-sm text-slate-900">{doc.name || key}</p>
-                                      {doc.uploadedAt && <p className="text-xs text-slate-500">Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}</p>}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <button onClick={() => setViewingDocument({ ...doc, key, shipmentId: currentShipment.id })} className="px-3 py-1 rounded-lg text-sm" style={{ background: '#2563EB', color: '#ffffff', border: '2px solid #1E40AF' }}>View</button>
-                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">Chat</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* NOTE: "Notes to Shipper" section removed as requested */}
         </div>
@@ -651,14 +630,97 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
       {/* Document Viewer Modal */}
       {viewingDocument && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6">
+          <div className="bg-white rounded-xl max-w-4xl w-full p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-slate-900">{viewingDocument.name}</h3>
-              <button onClick={() => setViewingDocument(null)} className="text-slate-500">Close</button>
+              <div>
+                <h3 className="text-slate-900 text-lg font-semibold">{viewingDocument.name || viewingDocument.fileName || 'Document Preview'}</h3>
+                {viewingDocument.documentType && <p className="text-slate-500 text-sm">{viewingDocument.documentType}</p>}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setZoomLevel((prev) => Math.min(prev + 25, 200))}
+                  disabled={zoomLevel >= 200}
+                  className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-4 h-4 text-slate-700" />
+                </button>
+                <span className="text-xs text-slate-600 min-w-[3rem] text-center">{zoomLevel}%</span>
+                <button
+                  onClick={() => setZoomLevel((prev) => Math.max(prev - 25, 50))}
+                  disabled={zoomLevel <= 50}
+                  className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-4 h-4 text-slate-700" />
+                </button>
+                <button
+                  onClick={() => {
+                    setViewingDocument(null);
+                    setZoomLevel(100);
+                  }}
+                  className="text-slate-500 hover:text-slate-700 text-2xl ml-2"
+                  title="Close preview"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            <p className="text-slate-600 text-sm mb-4">Preview not available in demo. You can download the file below.</p>
-            <div className="flex justify-end">
-              <a href="#" onClick={(e) => { e.preventDefault(); alert(`Downloading ${viewingDocument.name} for shipment ${viewingDocument.shipmentId}`); }} className="px-4 py-2 rounded-lg" style={{ background: '#2563EB', color: '#ffffff', border: '2px solid #1E40AF' }}>Download</a>
+
+            <div className="bg-slate-50 rounded-lg overflow-auto" style={{ height: '75vh' }}>
+              {loadingDocPreview && (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center text-slate-600">
+                    <Loader className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    <p>Loading preview...</p>
+                  </div>
+                </div>
+              )}
+
+              {!loadingDocPreview && !viewerUrl && (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-slate-600 text-sm">Preview not available. Please download the document.</p>
+                </div>
+              )}
+
+              {!loadingDocPreview && viewerUrl && (
+                <div className="flex items-start justify-center p-4">
+                  <div
+                    style={{
+                      transform: `scale(${zoomLevel / 100})`,
+                      transformOrigin: 'top center',
+                      transition: 'transform 0.2s'
+                    }}
+                  >
+                    <iframe
+                      src={viewerUrl}
+                      className="rounded border border-slate-200 bg-white"
+                      style={{ width: '700px', height: '900px' }}
+                      title="Document Preview"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  if (viewerUrl) window.open(viewerUrl, '_blank');
+                }}
+                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+              >
+                Open in new tab
+              </button>
+              <button
+                onClick={() => {
+                  setViewingDocument(null);
+                  setZoomLevel(100);
+                }}
+                className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

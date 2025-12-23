@@ -7,7 +7,7 @@ import {
   uploadShipmentDocument,
 } from '../../api/documents';
 
-export function ShipmentDocumentsPanel({ shipmentId, allowUpload = true }) {
+export function ShipmentDocumentsPanel({ shipmentId, allowUpload = true, onPreview = null }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -138,7 +138,7 @@ export function ShipmentDocumentsPanel({ shipmentId, allowUpload = true }) {
       )}
 
       <div className="rounded-lg border border-slate-100 divide-y divide-slate-100">
-        <div className="px-4 py-3 flex items-center justify-between bg-slate-50">
+          <div className="px-4 py-3 flex items-center justify-between bg-slate-50">
           <span className="text-slate-700 text-sm">Documents ({sortedDocuments.length})</span>
           {loading && <span className="text-xs text-slate-500">Loading…</span>}
         </div>
@@ -148,7 +148,11 @@ export function ShipmentDocumentsPanel({ shipmentId, allowUpload = true }) {
         )}
 
         {sortedDocuments.map((doc) => (
-          <div key={doc.id} className="px-4 py-3 flex items-center justify-between">
+          <div
+            key={doc.id}
+            className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 cursor-pointer"
+            onClick={() => onPreview?.(doc)}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
                 <FileText className="w-5 h-5" />
@@ -162,12 +166,16 @@ export function ShipmentDocumentsPanel({ shipmentId, allowUpload = true }) {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleDownload(doc)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownload(doc);
+                }}
                 disabled={downloadingId === doc.id}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-60 flex items-center gap-2"
+                className="p-2 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-60 flex items-center justify-center"
+                aria-label="Download document"
+                title="Download"
               >
-                <Download className="w-4 h-4" />
-                {downloadingId === doc.id ? 'Downloading…' : 'Download'}
+                <Download className={`w-4 h-4 ${downloadingId === doc.id ? 'animate-pulse' : ''}`} />
               </button>
             </div>
           </div>

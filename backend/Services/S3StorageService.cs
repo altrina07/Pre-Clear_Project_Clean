@@ -8,6 +8,7 @@ using PreClear.Api.Interfaces;
 using PreClear.Api.Models;
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace PreClear.Api.Services
@@ -166,6 +167,61 @@ namespace PreClear.Api.Services
             catch (Exception ex)
             {
                 _logger.LogError($"Error deleting file: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task<int> DeleteAllFilesForShipmentAsync(long shipmentId)
+        {
+            if (shipmentId <= 0) throw new ArgumentException("Invalid shipmentId", nameof(shipmentId));
+
+            var deleted = 0;
+            try
+            {
+                string? continuationToken = null;
+                do
+                {
+                    var listRequest = new ListObjectsV2Request
+                    {
+                        BucketName = _s3Settings.BucketName,
+                        // We can't know shipperId; list under top-level and filter
+                        Prefix = "shippers/",
+                        ContinuationToken = continuationToken
+                    };
+                    var listResponse = await _s3Client.ListObjectsV2Async(listRequest);
+
+                    var toDelete = listResponse.S3Objects
+                        .Where(o => o.Key.Contains($"/shipments/{shipmentId}/"))
+                        .Select(o => o.Key)
+                        .ToList();
+
+                    foreach (var key in toDelete)
+                    {
+                        try
+                        {
+                            await _s3Client.DeleteObjectAsync(new DeleteObjectRequest
+                            {
+                                BucketName = _s3Settings.BucketName,
+                                Key = key
+                            });
+                            deleted++;
+                            _logger.LogInformation("Deleted S3 object by scan: {Key}", key);
+                        }
+                        catch (AmazonS3Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed deleting S3 object during scan: {Key}", key);
+                        }
+                    }
+
+                    continuationToken = (listResponse.IsTruncated == true) ? listResponse.NextContinuationToken : null;
+                } while (!string.IsNullOrEmpty(continuationToken));
+
+                _logger.LogInformation("Deleted {Count} S3 objects for shipment {ShipmentId} via scan", deleted, shipmentId);
+                return deleted;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error scanning/deleting S3 objects for shipment {ShipmentId}", shipmentId);
                 throw;
             }
         }

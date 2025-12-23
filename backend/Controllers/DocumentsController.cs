@@ -19,12 +19,20 @@ namespace PreClear.Api.Controllers
     public class DocumentsController : ControllerBase
     {
         private readonly IDocumentService _service;
+        private readonly IDocumentValidationService _validationService;
         private readonly ILogger<DocumentsController> _logger;
+        private readonly IS3StorageService _s3;
 
-        public DocumentsController(IDocumentService service, ILogger<DocumentsController> logger)
+        public DocumentsController(
+            IDocumentService service, 
+            IDocumentValidationService validationService,
+            ILogger<DocumentsController> logger,
+            IS3StorageService s3)
         {
             _service = service;
+            _validationService = validationService;
             _logger = logger;
+            _s3 = s3;
         }
 
         private long GetUserId()
@@ -142,6 +150,28 @@ namespace PreClear.Api.Controllers
             }
         }
 
+        [HttpDelete("{id:long}")]
+        public async Task<IActionResult> DeleteDocument(long id)
+        {
+            try
+            {
+                _logger.LogInformation("Deleting document {DocumentId}", id);
+                var deleted = await _service.DeleteDocumentAsync(id);
+                if (!deleted) 
+                {
+                    _logger.LogWarning("Document {DocumentId} not found", id);
+                    return NotFound(new { error = "document_not_found" });
+                }
+                _logger.LogInformation("Document {DocumentId} deleted successfully", id);
+                return Ok(new { success = true, message = "Document deleted successfully" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting document {Id}", id);
+                return StatusCode(500, new { error = "internal_error", detail = ex.Message });
+            }
+        }
+
         private static string GetContentType(string path)
         {
             var ext = Path.GetExtension(path).ToLowerInvariant();
@@ -158,6 +188,127 @@ namespace PreClear.Api.Controllers
                 ".csv" => "text/csv",
                 _ => "application/octet-stream",
             };
+        }
+
+        [HttpPost("shipments/{shipmentId}/validate")]
+        public async Task<IActionResult> ValidateShipmentDocuments(long shipmentId)
+        {
+            try
+            {
+                _logger.LogInformation("Starting document validation for shipment {ShipmentId}", shipmentId);
+                
+                var validationResult = await _validationService.ValidateShipmentDocumentsAsync(shipmentId);
+                
+                if (validationResult.IsValid)
+                {
+                    _logger.LogInformation("Shipment {ShipmentId} passed validation with score {Score}", 
+                        shipmentId, validationResult.ValidationScore);
+                    return Ok(new
+                    {
+                        success = true,
+                        status = "approved",
+                        message = validationResult.Message,
+                        validationScore = validationResult.ValidationScore,
+                        issues = validationResult.Issues,
+                        packingNotes = validationResult.PackingNotes
+                    });
+                }
+                else
+                {
+                    _logger.LogWarning("Shipment {ShipmentId} failed validation. Issues: {IssueCount}", 
+                        shipmentId, validationResult.IssueCount);
+                    return BadRequest(new
+                    {
+                        success = false,
+                        status = "failed",
+                        message = validationResult.Message,
+                        validationScore = validationResult.ValidationScore,
+                        issues = validationResult.Issues,
+                        packingNotes = validationResult.PackingNotes
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating shipment {ShipmentId}", shipmentId);
+                return StatusCode(500, new
+                {
+                    success = false,
+                    status = "error",
+                    message = "Validation error occurred",
+                    detail = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("shipments/{shipmentId}/validation-status")]
+        public async Task<IActionResult> GetValidationStatus(long shipmentId)
+        {
+            try
+            {
+                var result = await _validationService.GetValidationResultAsync(shipmentId);
+                
+                if (result == null)
+                {
+                    return Ok(new
+                    {
+                        status = "not_validated",
+                        message = "Shipment has not been validated yet"
+                    });
+                }
+
+                return Ok(new
+                {
+                    status = result.Status,
+                    isValid = result.IsValid,
+                    message = result.Message,
+                    validationScore = result.ValidationScore,
+                    issues = result.Issues,
+                    completedAt = result.ValidationCompletedAt
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting validation status for shipment {ShipmentId}", shipmentId);
+                return StatusCode(500, new { error = "internal_error", detail = ex.Message });
+            }
+        }
+
+        [HttpDelete("shipments/{shipmentId}/documents")]
+        public async Task<IActionResult> DeleteShipmentDocuments(long shipmentId)
+        {
+            try
+            {
+                var removed = await _service.DeleteShipmentDocumentsAsync(shipmentId);
+                // If DB rows are already gone (manual delete), fall back to S3 scan
+                if (removed == 0)
+                {
+                    var s3Deleted = await _s3.DeleteAllFilesForShipmentAsync(shipmentId);
+                    return Ok(new { deleted = 0, s3Deleted });
+                }
+                return Ok(new { deleted = removed, s3Deleted = 0 });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting documents for shipment {ShipmentId}", shipmentId);
+                return StatusCode(500, new { error = "internal_error", detail = ex.Message });
+            }
+        }
+
+        // Direct S3 cleanup by shipment id when DB rows are gone
+        [HttpDelete("shipments/{shipmentId}/s3")] 
+        public async Task<IActionResult> DeleteShipmentS3(long shipmentId)
+        {
+            try
+            {
+                var count = await _s3.DeleteAllFilesForShipmentAsync(shipmentId);
+                return Ok(new { s3Deleted = count });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting S3 objects for shipment {ShipmentId}", shipmentId);
+                return StatusCode(500, new { error = "internal_error", detail = ex.Message });
+            }
         }
     }
 }
