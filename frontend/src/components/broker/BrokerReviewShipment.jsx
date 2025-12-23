@@ -261,6 +261,7 @@ export function BrokerReviewShipment({ shipment: initialShipment = {}, onNavigat
             <ShipmentDocumentsPanel
               shipmentId={currentShipment.id}
               allowUpload={false}
+              onPreview={(doc) => setViewingDocument(doc)}
             />
           )}
           
