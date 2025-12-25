@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 export function ShipperDashboard({ onNavigate }) {
   const { shipments: allShipments } = useShipments();
   const [filterStatus, setFilterStatus] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [viewingDocuments, setViewingDocuments] = useState(null);
   const [selectedShipmentForChat, setSelectedShipmentForChat] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -50,7 +51,20 @@ export function ShipperDashboard({ onNavigate }) {
     return activeShipments;
   };
   
-  const filteredShipments = getFilteredShipments();
+  let filteredShipments = getFilteredShipments();
+
+  // Apply search filter
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase();
+    filteredShipments = filteredShipments.filter(s => 
+      (s.referenceId && s.referenceId.toLowerCase().includes(query)) ||
+      (s.id && s.id.toString().includes(query)) ||
+      (s.title && s.title.toLowerCase().includes(query)) ||
+      (s.productName && s.productName.toLowerCase().includes(query)) ||
+      (s.shipper?.company && s.shipper.company.toLowerCase().includes(query)) ||
+      (s.shipperName && s.shipperName.toLowerCase().includes(query))
+    );
+  }
 
   const getStatusBadge = (shipment) => {
     if (shipment.status === 'cancelled') {
@@ -365,28 +379,43 @@ export function ShipperDashboard({ onNavigate }) {
         </div>
       </div>
 
-      {/* Filter Controls */}
-      <div className="mb-6 flex items-center gap-3 flex-wrap">
-      
-        {[
-          { label: 'All Shipments', value: 'all' },
-          { label: 'Pending Review', value: 'pending' },
-          { label: 'In Review', value: 'review' },
-          { label: 'Cleared', value: 'cleared' },
-          { label: 'Cancelled', value: 'cancelled' }
-        ].map(filter => (
-          <button
-            key={filter.value}
-            onClick={() => setFilterStatus(filter.value)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              filterStatus === filter.value 
-                ? 'bg-yellow-500 text-yellow-900' 
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
+      {/* Search and Filter Controls */}
+      <div className="mb-6 space-y-4">
+        {/* Search Bar */}
+        <div className="bg-white rounded-lg p-4 border-2" style={{ borderColor: '#3A2B28' }}>
+          <label className="block text-sm font-medium mb-2" style={{ color: '#2F1B17' }}>Search Shipments</label>
+          <input
+            type="text"
+            placeholder="Search by reference ID, title, or shipper..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2"
+            style={{ borderColor: '#EADFD8', background: '#FFFFFF' }}
+          />
+        </div>
+
+        {/* Filter Buttons */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {[
+            { label: 'All Shipments', value: 'all' },
+            { label: 'Pending Review', value: 'pending' },
+            { label: 'In Review', value: 'review' },
+            { label: 'Cleared', value: 'cleared' },
+            { label: 'Cancelled', value: 'cancelled' }
+          ].map(filter => (
+            <button
+              key={filter.value}
+              onClick={() => setFilterStatus(filter.value)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                filterStatus === filter.value 
+                  ? 'bg-yellow-500 text-yellow-900' 
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
             {filter.label}
           </button>
         ))}
+        </div>
       </div>
 
       {/* Unified Shipments Table */}

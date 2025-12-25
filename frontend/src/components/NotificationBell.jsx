@@ -39,13 +39,16 @@ export function NotificationBell() {
       onClick={handleClick}
       className="relative p-2 text-slate-600 hover:text-slate-900 transition-colors"
       title="View notifications"
-    >
-      <Bell className="w-5 h-5" />
-      {unreadCount > 0 && (
-        <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full min-w-[20px]">
+    >{unreadCount > 0 && (
+<span className="absolute -top-1 -right-1 inline-flex items-center justify-center 
+w-4 h-4 
+text-[5px] font-xs text-white 
+bg-red-600 rounded-full">
           {unreadCount > 99 ? '99+' : unreadCount}
         </span>
       )}
+      <Bell className="w-7 h-7 "/>
+      
     </button>
   );
 }

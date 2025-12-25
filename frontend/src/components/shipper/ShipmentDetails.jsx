@@ -904,44 +904,7 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
         </div>
       </div>
 
-      {/* Broker Assignment Status */}
-      {(shipmentData.assignedBrokerId || brokerApproval === 'pending' || brokerApproval === 'approved') && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {brokerApproval === 'approved' ? (
-                <>
-                  <CheckCircle className="w-6 h-6 text-green-600" />
-                  <div>
-                    <p className="text-slate-900 font-semibold">Broker Assigned & Approved</p>
-                    <p className="text-slate-600 text-sm">Your shipment has been successfully assigned and approved.</p>
-                    <p className="text-slate-500 text-xs mt-1">Assigned Broker: {assignedBrokerId ? `#${assignedBrokerId}` : 'Pending assignment'}</p>
-                  </div>
-                </>
-              ) : brokerApproval === 'pending' ? (
-                <>
-                  <Clock className="w-6 h-6 text-blue-600" />
-                  <div>
-                    <p className="text-slate-900 font-semibold">Broker Assigned & Under Review</p>
-                    <p className="text-slate-600 text-sm">A customs broker is reviewing your shipment. You'll be notified once the review is complete.</p>
-                    <p className="text-slate-500 text-xs mt-1">Assigned Broker: {assignedBrokerId ? `#${assignedBrokerId}` : 'Pending assignment'}</p>
-                  </div>
-                </>
-              ) : shipmentData.assignedBrokerId ? (
-                <>
-                  <UserCheck className="w-6 h-6 text-purple-600" />
-                  <div>
-                    <p className="text-slate-900 font-semibold">Broker Assigned</p>
-                    <p className="text-slate-600 text-sm">Your shipment has been automatically assigned to a qualified broker.</p>
-                    <p className="text-slate-500 text-xs mt-1">Assigned Broker: #{assignedBrokerId}</p>
-                  </div>
-                </>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      )}
-
+      
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Main Workflow */}
         <div className="lg:col-span-2 space-y-6">
@@ -1438,15 +1401,58 @@ export function ShipmentDetails({ shipment, onNavigate, loadingOverride = false,
                   <p className="text-slate-700">
                     AI evaluation passed! Submit your shipment to a professional customs broker for final review and approval.
                   </p>
-                  <button
-                    onClick={handleRequestBrokerApproval}
-                    className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all transform hover:scale-105 font-bold flex items-center justify-center gap-2 shadow-lg"
-                  >
-                    <UserCheck className="w-5 h-5" />
-                    Request Broker Review
-                  </button>
+                  {/* Broker Assignment Status */}
+      {(shipmentData.assignedBrokerId || brokerApproval === 'pending' || brokerApproval === 'approved') && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {brokerApproval === 'approved' ? (
+                <>
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                  <div>
+                    <p className="text-slate-900 font-semibold">Broker Assigned & Approved</p>
+                    <p className="text-slate-600 text-sm">Your shipment has been successfully assigned and approved.</p>
+                    <p className="text-slate-500 text-xs mt-1">Assigned Broker: {assignedBrokerId ? `#${assignedBrokerId}` : 'Pending assignment'}</p>
+                  </div>
+                </>
+              ) : brokerApproval === 'pending' ? (
+                <>
+                  <Clock className="w-6 h-6 text-blue-600" />
+                  <div>
+                    <p className="text-slate-900 font-semibold">Broker Assigned & Under Review</p>
+                    <p className="text-slate-600 text-sm">A customs broker is reviewing your shipment. You'll be notified once the review is complete.</p>
+                    <p className="text-slate-500 text-xs mt-1">Assigned Broker: {assignedBrokerId ? `#${assignedBrokerId}` : 'Pending assignment'}</p>
+                  </div>
+                </>
+              ) : shipmentData.assignedBrokerId ? (
+                <>
+                  <UserCheck className="w-6 h-6 text-purple-600" />
+                  <div>
+                    <p className="text-slate-900 font-semibold">Broker Assigned</p>
+                    <p className="text-slate-600 text-sm">Your shipment has been automatically assigned to a qualified broker.</p>
+                    <p className="text-slate-500 text-xs mt-1">Assigned Broker: #{assignedBrokerId}</p>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+                  {!shipmentData.assignedBrokerId && (
+                    <button
+                      onClick={handleRequestBrokerApproval}
+                      className="w-full px-6 py-4 text-white rounded-lg hover:bg-purple-700 transition-all transform hover:scale-105 font-bold flex items-center justify-center gap-2 shadow-lg"
+                      style={{ background: '#7C3AED' }}
+                    >
+                      
+                      <UserCheck className="w-5 h-5" />
+                      Request Broker Review
+                    </button>
+                  )}
                 </div>
               )}
+              
 
               {requestingBroker && (
                 <div className="p-6 bg-white rounded-lg border border-purple-200 text-center space-y-3">

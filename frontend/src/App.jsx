@@ -262,7 +262,7 @@ function AppShell() {
       case "profile":
         return <ProfilePage userRole={userRole} onLogout={handleLogout} />;
       case "notifications":
-        return <NotificationsPage userRole="shipper" />;
+        return <NotificationsPage userRole="shipper" onNavigate={handleNavigate} />;
       default:
         return <ShipperDashboard onNavigate={handleNavigate} />;
     }
@@ -310,7 +310,7 @@ function AppShell() {
       case "profile":
         return <ProfilePage userRole={userRole} onLogout={handleLogout} />;
       case "notifications":
-        return <NotificationsPage userRole="broker" />;
+        return <NotificationsPage userRole="broker" onNavigate={handleNavigate} />;
       default:
         return <BrokerDashboard onNavigate={handleNavigate} />;
     }

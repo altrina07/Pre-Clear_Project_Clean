@@ -14,7 +14,7 @@ import {
 import { getNotifications, markAsRead, markAllAsRead } from '../api/notifications';
 import { useNavigate } from 'react-router-dom';
 
-export function NotificationsPage({ userRole }) {
+export function NotificationsPage({ userRole, onNavigate }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // all, unread, read
@@ -104,7 +104,13 @@ export function NotificationsPage({ userRole }) {
   };
 
   const handleGoBack = () => {
-    navigate(-1);
+    // Prefer parent navigation to update AppShell's currentPage state
+    if (typeof onNavigate === 'function') {
+      onNavigate('dashboard');
+      return;
+    }
+    // Fallback: navigate to root
+    navigate('/', { replace: true });
   };
 
   const getNotificationIcon = (type) => {

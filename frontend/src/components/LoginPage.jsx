@@ -7,12 +7,15 @@ import {
   Settings,
   ArrowRight,
   ArrowLeft,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 export function LoginPage({ onLogin, onNavigate }) {
   const [selectedRole, setSelectedRole] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -179,20 +182,35 @@ export function LoginPage({ onLogin, onNavigate }) {
                 <label className="block mb-2" style={{ color: "#7A5B52" }}>
                   Password
                 </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                  className="w-full px-4 py-3 rounded-xl focus:outline-none"
-                  style={{
-                    background: "#ffffff",
-                    border: "1px solid #EADFD8",
-                    color: "#2F1B17",
-                    boxShadow: "none",
-                  }}
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    required
+                    className="w-full py-3 pl-4 pr-12 rounded-xl focus:outline-none"
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid #EADFD8",
+                      color: "#2F1B17",
+                      boxShadow: "none",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 focus:outline-none hover:opacity-70 transition-opacity"
+                    style={{ background: "transparent", border: "none", padding: "4px" }}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" style={{ color: "#7A5B52" }} />
+                    ) : (
+                      <Eye className="w-5 h-5" style={{ color: "#7A5B52" }} />
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center justify-between">

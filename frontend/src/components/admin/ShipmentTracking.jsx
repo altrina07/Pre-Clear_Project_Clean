@@ -6,6 +6,9 @@ export function ShipmentTracking() {
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedShipmentId, setExpandedShipmentId] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [brokerFilter, setBrokerFilter] = useState('all');
 
   useEffect(() => {
     const fetchShipments = async () => {
@@ -59,13 +62,97 @@ export function ShipmentTracking() {
     setExpandedShipmentId(expandedShipmentId === shipmentId ? null : shipmentId);
   };
 
+  // Apply filters
+  let filteredShipments = [...shipments];
+  
+  // Status filter
+  if (statusFilter !== 'all') {
+    if (statusFilter === 'ai-approved') {
+      filteredShipments = filteredShipments.filter(s => s.aiApprovalStatus === 'approved');
+    } else if (statusFilter === 'broker-approved') {
+      filteredShipments = filteredShipments.filter(s => s.brokerApprovalStatus === 'approved');
+    } else if (statusFilter === 'pending') {
+      filteredShipments = filteredShipments.filter(s => 
+        s.aiApprovalStatus === 'pending' || s.brokerApprovalStatus === 'pending'
+      );
+    } else if (statusFilter === 'paid') {
+      filteredShipments = filteredShipments.filter(s => s.status === 'paid');
+    }
+  }
+
+  // Broker filter
+  if (brokerFilter !== 'all') {
+    if (brokerFilter === 'assigned') {
+      filteredShipments = filteredShipments.filter(s => s.assignedBrokerId);
+    } else if (brokerFilter === 'unassigned') {
+      filteredShipments = filteredShipments.filter(s => !s.assignedBrokerId);
+    }
+  }
+
+  // Search filter
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase();
+    filteredShipments = filteredShipments.filter(s => 
+      (s.referenceId && s.referenceId.toLowerCase().includes(query)) ||
+      (s.id && s.id.toString().includes(query)) ||
+      (s.title && s.title.toLowerCase().includes(query)) ||
+      (s.shipper?.company && s.shipper.company.toLowerCase().includes(query)) ||
+      (s.consignee?.company && s.consignee.company.toLowerCase().includes(query))
+    );
+  }
+
   return (
     <div style={{ background: '#FBF9F6', minHeight: '100vh', padding: 24 }}>
       <h1 className="mb-2" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 10, fontSize: '1.5rem' }}>
         <MapPin className="w-6 h-6" style={{ color: '#3A2B28' }} />
         <span>Shipment Tracking Overview</span>
       </h1>
-      <p className="text-slate-600 mb-8">Complete list of all shipments with detailed information</p>
+      <p className="text-slate-600 mb-4">Complete list of all shipments with detailed information</p>
+      
+      {/* Filters */}
+      <div className="mb-6 bg-white rounded-lg p-4 border-2" style={{ borderColor: '#3A2B28' }}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: '#2F1B17' }}>Search</label>
+            <input
+              type="text"
+              placeholder="Search by reference, title, or company..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2"
+              style={{ borderColor: '#EADFD8', background: '#FFFFFF' }}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: '#2F1B17' }}>Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2"
+              style={{ borderColor: '#EADFD8', background: '#FFFFFF', color: '#2F1B17' }}
+            >
+              <option value="all">All Status</option>
+              <option value="ai-approved">AI Approved</option>
+              <option value="broker-approved">Broker Approved</option>
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: '#2F1B17' }}>Broker Assignment</label>
+            <select
+              value={brokerFilter}
+              onChange={(e) => setBrokerFilter(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2"
+              style={{ borderColor: '#EADFD8', background: '#FFFFFF', color: '#2F1B17' }}
+            >
+              <option value="all">All Brokers</option>
+              <option value="assigned">Assigned</option>
+              <option value="unassigned">Unassigned</option>
+            </select>
+          </div>
+        </div>
+      </div>
       
       {loading ? (
         <div className="bg-white rounded-xl p-8 text-center">
@@ -76,7 +163,7 @@ export function ShipmentTracking() {
         </div>
       ) : (
         <div className="space-y-3">
-        {shipments.map((shipment) => {
+        {filteredShipments.map((shipment) => {
           const isExpanded = expandedShipmentId === shipment.id;
           const currencyCode = shipment.currency || 'USD';
           const currencySymbol = { USD: '$', EUR: '€', GBP: '£', JPY: '¥', CAD: 'C$', INR: '₹', CNY: '¥', AUD: 'A$' }[currencyCode] || currencyCode;
@@ -297,10 +384,10 @@ export function ShipmentTracking() {
           );
         })}
 
-        {shipments.length === 0 && (
+        {filteredShipments.length === 0 && (
           <div className="bg-white rounded-xl p-8 text-center">
             <Package className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-            <p className="text-slate-600">No shipments found</p>
+            <p className="text-slate-600">{searchQuery || statusFilter !== 'all' || brokerFilter !== 'all' ? 'No shipments match your filters' : 'No shipments found'}</p>
           </div>
         )}
         </div>

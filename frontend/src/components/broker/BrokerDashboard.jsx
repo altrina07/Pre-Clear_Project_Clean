@@ -18,14 +18,51 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 
 export function BrokerDashboard({ onNavigate }) {
   const { shipments = [] } = useShipments();
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Filter out completed shipments (paid, broker-approved, or token-generated) and draft shipments for the working table
-  const activeShipments = shipments.filter(s => 
+  let activeShipments = shipments.filter(s => 
     s.status !== 'paid' && 
     s.status !== 'token-generated' && 
     s.status !== 'draft' &&
     s.brokerApproval !== 'approved'
   );
+
+  // Apply status filter
+  if (statusFilter !== 'all') {
+    if (statusFilter === 'pending-review') {
+      activeShipments = activeShipments.filter(s => 
+        s.aiApproval === 'approved' && 
+        (s.brokerApproval === 'pending' || s.brokerApproval === 'not-started')
+      );
+    } else if (statusFilter === 'new-submissions') {
+      activeShipments = activeShipments.filter(s => 
+        s.status === 'documents-uploaded' || s.status === 'awaiting-ai'
+      );
+    } else if (statusFilter === 'docs-requested') {
+      activeShipments = activeShipments.filter(s => 
+        s.status === 'document-requested' || s.brokerApproval === 'documents-requested'
+      );
+    } else if (statusFilter === 'docs-resubmitted') {
+      activeShipments = activeShipments.filter(s => 
+        s.status === 'awaiting-broker' && s.brokerApproval === 'documents-requested'
+      );
+    }
+  }
+
+  // Apply search filter
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase();
+    activeShipments = activeShipments.filter(s => 
+      (s.referenceId && s.referenceId.toLowerCase().includes(query)) ||
+      (s.id && s.id.toString().includes(query)) ||
+      (s.title && s.title.toLowerCase().includes(query)) ||
+      (s.productName && s.productName.toLowerCase().includes(query)) ||
+      (s.shipper?.company && s.shipper.company.toLowerCase().includes(query)) ||
+      (s.shipperName && s.shipperName.toLowerCase().includes(query))
+    );
+  }
 
   // Counts use the full dataset for accuracy (excluding drafts)
   const nonDraftShipments = shipments.filter(s => s.status !== 'draft');
@@ -241,7 +278,37 @@ export function BrokerDashboard({ onNavigate }) {
       <div className="mb-8">
         <div className="mb-4">
           <h2 className="text-[#2F1B17]">All Shipments</h2>
-          <p className="text-[#7A5B52] text-sm">Combined list of all shipments (filter/sort in table component as needed)</p>
+          <p className="text-[#7A5B52] text-sm">Combined list of all shipments</p>
+        </div>
+
+        {/* Filters */}
+        <div className="mb-4 bg-white rounded-lg p-4 border-2" style={{ borderColor: '#3A2B28' }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ color: '#2F1B17' }}>Search</label>
+              <input
+                type="text"
+                placeholder="Search by reference ID, title, or shipper..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2"
+                style={{ borderColor: '#EADFD8', background: '#FFFFFF' }}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ color: '#2F1B17' }}>Filter by Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2"
+                style={{ borderColor: '#EADFD8', background: '#FFFFFF', color: '#2F1B17' }}
+              >
+                <option value="all">All Shipments</option>
+                <option value="pending-review">Pending Review</option>
+                <option value="new-submissions">New Submissions</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <UnifiedShipmentTable shipmentsList={allShipments} />

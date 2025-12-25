@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { signUp } from '../api/auth';
-import { Shield, User, Briefcase, Settings, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Shield, User, Briefcase, Settings, ArrowRight, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 
 export function SignupPage({ onNavigate }) {
   const [selectedRole, setSelectedRole] = useState('');
@@ -14,6 +14,8 @@ export function SignupPage({ onNavigate }) {
     phone: ''
   });
   const [errors, setErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -301,39 +303,69 @@ export function SignupPage({ onNavigate }) {
 
               <div>
                 <label className="block mb-2" style={{ color: '#7A5B52' }}>Password</label>
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="Enter your password (min. 8 characters)"
-                  className="w-full px-4 py-3 rounded-xl"
-                  style={{
-                    background: '#FFFFFF',
-                    border: '1px solid #EADFD8',
-                    color: '#2F1B17'
-                  }}
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    placeholder="Enter your password (min. 8 characters)"
+                    className="w-full py-3 pl-4 pr-12 rounded-xl"
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1px solid #EADFD8',
+                      color: '#2F1B17'
+                    }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 focus:outline-none hover:opacity-70 transition-opacity"
+                    style={{ background: "transparent", border: "none", padding: "4px" }}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" style={{ color: "#7A5B52" }} />
+                    ) : (
+                      <Eye className="w-5 h-5" style={{ color: "#7A5B52" }} />
+                    )}
+                  </button>
+                </div>
                 {errors.password && <p className="text-sm" style={{ color: '#D9534F', marginTop: 6 }}>{errors.password}</p>}
               </div>
 
               <div>
                 <label className="block mb-2" style={{ color: '#7A5B52' }}>Confirm Password</label>
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  placeholder="Confirm your password"
-                  className="w-full px-4 py-3 rounded-xl"
-                  style={{
-                    background: '#FFFFFF',
-                    border: '1px solid #EADFD8',
-                    color: '#2F1B17'
-                  }}
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    placeholder="Confirm your password"
+                    className="w-full py-3 pl-4 pr-12 rounded-xl"
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1px solid #EADFD8',
+                      color: '#2F1B17'
+                    }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 focus:outline-none hover:opacity-70 transition-opacity"
+                    style={{ background: "transparent", border: "none", padding: "4px" }}
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-5 h-5" style={{ color: "#7A5B52" }} />
+                    ) : (
+                      <Eye className="w-5 h-5" style={{ color: "#7A5B52" }} />
+                    )}
+                  </button>
+                </div>
                 {errors.confirmPassword && <p className="text-sm" style={{ color: '#D9534F', marginTop: 6 }}>{errors.confirmPassword}</p>}
               </div>
 
