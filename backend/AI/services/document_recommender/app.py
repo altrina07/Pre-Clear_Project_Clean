@@ -2,6 +2,7 @@ from typing import List, Optional, Dict
 import logging
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from inference.predict_hybrid import predict_documents_hybrid
@@ -18,6 +19,15 @@ app = FastAPI(
     title="Pre-Clear Document Recommender",
     description="Hybrid ML + Rules Engine for Trade Compliance Document Recommendation",
     version="2.0.0"
+)
+
+# CORS Configuration for AWS Deployment
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
