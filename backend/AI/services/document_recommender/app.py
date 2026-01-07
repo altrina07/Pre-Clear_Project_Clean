@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from inference.predict_hybrid import predict_documents_hybrid
 
+app = FastAPI(root_path="/recommender")
 
 # Configure logging
 logging.basicConfig(

@@ -4,6 +4,8 @@ from pydantic import BaseModel
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+app = FastAPI(root_path="/hs")
+
 BASE_DIR = os.path.dirname(__file__)
 # Navigate up 3 levels: hs_service -> services -> AI -> models
 MODELS_DIR = os.path.join(BASE_DIR, '..', '..', 'models')
