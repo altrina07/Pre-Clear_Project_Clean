@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 
 export default defineConfig({
+  define: {
+  // Backend HTTPS endpoint (production custom domain with ACM certificate)
+  'import.meta.env.VITE_API_URL': JSON.stringify('https://api.pre-clear.app'),
+  },
   plugins: [react()],
   resolve: {
         extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],

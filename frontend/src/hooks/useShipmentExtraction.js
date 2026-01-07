@@ -22,7 +22,10 @@ export function useShipmentExtraction() {
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
 
-  const baseUrl = (import.meta?.env?.VITE_API_URL) || "http://localhost:5000";
+  // Production: Use v4 EB environment URL directly
+  const baseUrl = import.meta.env.MODE === 'production' 
+     ? 'https://api.pre-clear.app' 
+    : (import.meta.env?.env?.VITE_API_URL || '');
 
   const extract = async (files) => {
     setLoading(true);

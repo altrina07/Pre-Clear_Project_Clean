@@ -358,20 +358,32 @@ export function useShipments() {
       }
     },
     uploadDocument: async (shipmentId, file, docType) => {
-      const uploaded = await uploadShipmentDocument(shipmentId, file, docType);
-      // best-effort mark uploaded by name for backend tracking
       try {
-        await markShipmentDocument(shipmentId, file.name);
-      } catch { /* non-fatal */ }
+        const uploaded = await uploadShipmentDocument(shipmentId, file, docType);
+        if (!uploaded) {
+          console.warn('[useShipments.uploadDocument] No response body from upload');
+          return null;
+        }
 
-      // reflect minimal metadata in store for legacy UI
-      const shipment = shipmentsStore.getShipmentById(shipmentId);
-      if (shipment) {
-        const docName = file.name;
-        shipmentsStore.uploadDocument(shipmentId, docName, docType || 'document');
+        // best-effort mark uploaded by name for backend tracking
+        try {
+          await markShipmentDocument(shipmentId, file.name);
+        } catch (markErr) {
+          console.warn('[useShipments.uploadDocument] markShipmentDocument failed (non-fatal):', markErr);
+        }
+
+        // reflect minimal metadata in store for legacy UI
+        const shipment = shipmentsStore.getShipmentById(shipmentId);
+        if (shipment) {
+          const docName = file.name;
+          shipmentsStore.uploadDocument(shipmentId, docName, docType || 'document');
+        }
+
+        return uploaded;
+      } catch (err) {
+        console.error('[useShipments.uploadDocument] Upload failed:', err);
+        return null;
       }
-
-      return uploaded;
     },
     bookShipment: (id, bookingDate, estimatedDelivery, amount) => 
       shipmentsStore.bookShipment(id, bookingDate, estimatedDelivery, amount),

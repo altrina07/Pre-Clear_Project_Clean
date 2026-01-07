@@ -3,9 +3,11 @@
  * These are sample implementations showing how to connect the form to your backend
  */
 
-// Get API base URL from environment
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-const API_BASE = `${API_BASE_URL}/api`;
+// Get API base URL - production-safe routing
+// Production: Use relative paths (will auto-route through CloudFront to api.pre-clear.app)
+// Development: Use VITE_API_URL from .env.development
+const API_BASE_URL = import.meta.env.MODE === 'production' ? '' : (import.meta.env.VITE_API_URL || '');
+const API_BASE = API_BASE_URL ? `${API_BASE_URL}/api` : '/api';
 
 // ============================================================================
 // 1. FORM SUBMISSION - Save Shipment to Backend
@@ -47,7 +49,7 @@ const handleSubmit = async () => {
       });
     } else {
       // CREATE new shipment
-      response = await fetch('/api/shipments', {
+      response = await fetch('https://api.pre-clear.app/api/shipments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -467,9 +469,13 @@ import { uploadDocument } from './apiIntegration';
 /*
 Create .env file with:
 
-VITE_API_BASE_URL=http://localhost:5000
+# Development only - used with npm run dev
+VITE_API_URL=http://localhost:5000
 VITE_API_VERSION=v1
 VITE_APP_NAME=Pre-Clear
+
+Note: In production, use relative paths (/api/*) which are automatically routed to the backend.
+
 
 Usage in components:
 const baseUrl = import.meta.env.VITE_API_BASE_URL;

@@ -154,11 +154,11 @@ export function formatCurrency(amount, currency = 'USD') {
   }
 }
 
-// HS Code suggestions based on product name/description
+  // HS Code suggestions based on product name/description
 export async function suggestHSCode(productName, productDescription, category) {
   // Call backend HS suggestion endpoint
   try {
-    const resp = await fetch('/api/ai/hs/suggest', {
+    const resp = await fetch('https://api.pre-clear.app/api/ai/hs/suggest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: productName || '', category: category || '', description: productDescription || '', k: 5 })

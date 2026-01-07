@@ -28,21 +28,25 @@ export function LoginPage({ onLogin, onNavigate }) {
       
       const resp = await signIn({ email, password });
       console.log('✅ Sign-in response:', resp);
-      
-      // Token storage is centralized in the auth API via shared client.
-      if (!resp?.token) {
-        console.warn('⚠️  No token in response!');
-      }
-      
+
+      const token = resp?.token;
       const role = resp?.role || selectedRole || '';
+
+      if (!token) {
+        console.warn('⚠️  No token in response!');
+        alert('Sign in failed: missing token');
+        console.groupEnd();
+        return;
+      }
+
       console.log('✅ Login successful, navigating with role:', role);
       console.groupEnd();
       
-      onLogin(role);
+      if (onLogin) onLogin(role);
     } catch (err) {
       console.groupEnd();
       console.error('❌ Login error:', err);
-      const msg = err?.response?.data?.error || err?.message || 'signin_failed';
+      const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'signin_failed';
       alert('Sign in failed: ' + msg);
     }
   };

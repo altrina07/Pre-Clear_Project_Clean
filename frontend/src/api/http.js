@@ -1,9 +1,10 @@
 import axios from 'axios';
 
-// Base URL from environment variables or default to localhost
-// In production, VITE_API_URL should be set to: http://34.201.14.102
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-const API_BASE = `${API_BASE_URL}/api`;
+// Base URL - explicit backend in production
+// In production: use explicit https://api.pre-clear.app to bypass CloudFront
+// In development: use VITE_API_URL from .env.development (http://localhost:5000)
+const API_BASE_URL = import.meta.env.MODE === 'production' ? 'https://api.pre-clear.app' : (import.meta.env.VITE_API_URL || '');
+const API_BASE = API_BASE_URL ? `${API_BASE_URL}/api` : '/api';
 
 // Log API configuration (helps debug deployment issues)
 console.log('🔧 API Configuration:', {

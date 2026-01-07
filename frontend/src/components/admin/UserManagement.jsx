@@ -45,7 +45,7 @@ export function UserManagement() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/users', {
+      const response = await fetch('https://api.pre-clear.app/api/users', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('pc_token')}`
         }
@@ -181,7 +181,7 @@ export function UserManagement() {
   const refreshUserData = async () => {
     // Fetch the latest user data and update the selected user
     try {
-      const response = await fetch('/api/users', {
+      const response = await fetch('https://api.pre-clear.app/api/users', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('pc_token')}`
         }

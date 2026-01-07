@@ -41,7 +41,7 @@ export const useRequiredDocuments = (
         service_level: data.serviceLevel || 'Standard',
       };
 
-      const response = await fetch('/api/ai/documents/predict', {
+      const response = await fetch('https://api.pre-clear.app/api/ai/documents/predict', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

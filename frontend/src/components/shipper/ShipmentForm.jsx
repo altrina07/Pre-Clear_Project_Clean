@@ -617,7 +617,7 @@ export function ShipmentForm({ shipment, onNavigate }) {
           pythonPort: 9000
         };
 
-        const response = await fetch('/api/ai/required-documents', {
+        const response = await fetch('https://api.pre-clear.app/api/ai/required-documents', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -627,8 +627,20 @@ export function ShipmentForm({ shipment, onNavigate }) {
           throw new Error(`AI service error: ${response.status}`);
         }
 
-        const data = await response.json();
-        const aiDocs = (data.requiredDocuments || []).map(name => ({
+        let data;
+        try {
+          data = await response.json();
+        } catch (parseErr) {
+          console.error('Failed to parse AI response:', parseErr);
+          throw new Error('AI response parsing failed');
+        }
+
+        const docArray = Array.isArray(data?.requiredDocuments) ? data.requiredDocuments : [];
+        if (!docArray.length) {
+          console.warn('AI returned no requiredDocuments array');
+        }
+
+        const aiDocs = docArray.map(name => ({
           name,
           required: true,
           description: '',
@@ -657,7 +669,7 @@ export function ShipmentForm({ shipment, onNavigate }) {
           }
         }
 
-        setRequiredDocuments(aiDocs);
+        setRequiredDocuments(aiDocs || []);
       } catch (err) {
         console.error('Failed to fetch AI documents:', err);
         setRequiredDocuments([]);
@@ -905,7 +917,7 @@ export function ShipmentForm({ shipment, onNavigate }) {
     let mounted = true;
     (async () => {
       try {
-        const resp = await fetch('/api/ai/hs/sections');
+        const resp = await fetch('https://api.pre-clear.app/api/ai/hs/sections');
         if (!resp.ok) return;
         const body = await resp.json();
         if (!mounted) return;

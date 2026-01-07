@@ -2,11 +2,11 @@
  * API utility functions for making HTTP requests to the backend
  */
 
-// API Base URL - configured for AWS deployment
-// Production: http://34.201.14.102/api
-// Development: http://localhost:5000/api
-const API_BASE_URL_RAW = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-const API_BASE_URL = `${API_BASE_URL_RAW}/api`;
+// API Base URL - explicit backend URL
+// Production: Use explicit https://api.pre-clear.app to bypass CloudFront and reach backend directly
+// Development: Use VITE_API_URL from .env.development (http://localhost:5000)
+const API_BASE_URL_RAW = import.meta.env.MODE === 'production' ? 'https://api.pre-clear.app' : (import.meta.env.VITE_API_URL || '');
+const API_BASE_URL = API_BASE_URL_RAW ? `${API_BASE_URL_RAW}/api` : '/api';
 
 // Log configuration on load
 console.log('🌐 API Base URL:', API_BASE_URL, '| Mode:', import.meta.env.MODE);

@@ -23,7 +23,7 @@ export function useHsCodeSuggestions({ name, category, description, delay = 700,
       setLoading(true);
       setError(null);
       try {
-        const resp = await fetch('/api/ai/hs/suggest', {
+        const resp = await fetch('https://api.pre-clear.app/api/ai/hs/suggest', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, category, description, k })
